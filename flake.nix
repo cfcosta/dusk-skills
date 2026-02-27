@@ -2,6 +2,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    playwright-cli = {
+      url = "github:microsoft/playwright-cli";
+      flake = false;
+    };
+
     skill-design-taste-frontend = {
       url = "github:Leonxlnx/taste-skill";
       flake = false;
@@ -57,17 +62,26 @@
 
       packages = forEachSupportedSystem (
         { pkgs, ... }:
+        let
+          playwright-cli = pkgs.buildNpmPackage {
+            pname = "playwright-cli";
+            version = inputs.playwright-cli.shortRev;
+            src = inputs.playwright-cli;
+            npmDepsHash = "sha256-4x3ozVrST6LtLoHl9KtmaOKrkYwCK84fwEREaoNaESc=";
+            dontNpmBuild = true;
+          };
+        in
         {
-          default = pkgs.stdenv.mkDerivation (finalAttrs: {
-            pname = "";
-            version = "";
+          inherit playwright-cli;
+          default = pkgs.stdenv.mkDerivation (_: {
+            name = "dusk-skills";
             src = self;
 
             buildPhase = ''
               mkdir -p $out/{prompts,skills}
 
               cp -rf ${./prompts}/* $out/prompts/
-              cp -rf ${./skills}/* $out/skills/
+              cp -rf ${./skills}/rust-proptest $out/skills/rust-proptest
 
               mkdir -p $out/skills/humanizer
               cp -rf ${inputs.skill-humanizer}/* $out/skills/humanizer/
@@ -80,6 +94,10 @@
 
               mkdir -p $out/skills/playwright
               cp -rf ${inputs.skillset-openai}/skills/.curated/playwright/* $out/skills/playwright/
+              cp -rf ${./skills}/playwright/SKILL.md $out/skills/playwright/
+
+              substituteInPlace $out/skills/playwright/SKILL.md \
+                --replace-fail '##PLAYWRIGHT-CLI##' '${playwright-cli}/bin/playwright-cli'
             '';
           });
         }

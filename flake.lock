@@ -16,9 +16,26 @@
         "type": "github"
       }
     },
+    "playwright-cli": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1772067144,
+        "narHash": "sha256-XjYib26oVoTEmjD5wHMlauEdtXkaC60OBitb1mj/Xnk=",
+        "owner": "microsoft",
+        "repo": "playwright-cli",
+        "rev": "fa6f6bcca9c3eeb4ac71051f83ebd623ac51d765",
+        "type": "github"
+      },
+      "original": {
+        "owner": "microsoft",
+        "repo": "playwright-cli",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "nixpkgs": "nixpkgs",
+        "playwright-cli": "playwright-cli",
         "skill-design-taste-frontend": "skill-design-taste-frontend",
         "skill-humanizer": "skill-humanizer",
         "skill-visual-explainer": "skill-visual-explainer",
