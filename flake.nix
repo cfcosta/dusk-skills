@@ -1,5 +1,20 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    skill-design-taste-frontend = {
+      url = "github:Leonxlnx/taste-skill";
+      flake = false;
+    };
+    skill-humanizer = {
+      url = "github:blader/humanizer";
+      flake = false;
+    };
+    skill-visual-explainer = {
+      url = "github:nicobailon/visual-explainer";
+      flake = false;
+    };
+  };
 
   outputs =
     { self, ... }@inputs:
@@ -48,6 +63,15 @@
 
               cp -rf ${./prompts}/* $out/prompts/
               cp -rf ${./skills}/* $out/skills/
+
+              mkdir -p $out/skills/humanizer
+              cp -rf ${inputs.skill-humanizer}/* $out/skills/humanizer
+
+              mkdir -p $out/skills/visual-explainer
+              cp -rf ${inputs.skill-visual-explainer}/* $out/skills/visual-explainer
+
+              mkdir -p $out/skills/design-taste-frontend
+              cp -rf ${inputs.skill-design-taste-frontend}/SKILL.md $out/skills/design-taste-frontend
             '';
           });
         }
