@@ -63,12 +63,30 @@
       packages = forEachSupportedSystem (
         { pkgs, ... }:
         let
-          playwright-cli = pkgs.buildNpmPackage {
+          browsers = (builtins.fromJSON (builtins.readFile "${pkgs.playwright-driver}/browsers.json")).browsers;
+          chromium-rev = (builtins.head (builtins.filter (x: x.name == "chromium") browsers)).revision;
+          chromium-executable = "${pkgs.playwright-driver.browsers}/chromium-${toString chromium-rev}/chrome-linux64/chrome";
+
+          playwright-cli-unwrapped = pkgs.buildNpmPackage {
             pname = "playwright-cli";
             version = inputs.playwright-cli.shortRev;
             src = inputs.playwright-cli;
             npmDepsHash = "sha256-4x3ozVrST6LtLoHl9KtmaOKrkYwCK84fwEREaoNaESc=";
             dontNpmBuild = true;
+          };
+
+          playwright-cli = pkgs.symlinkJoin {
+            name = "playwright-cli";
+            paths = [ playwright-cli-unwrapped ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            postBuild = ''
+              wrapProgram $out/bin/playwright-cli \
+                --set-default PLAYWRIGHT_BROWSERS_PATH "${pkgs.playwright-driver.browsers}" \
+                --set-default PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS "true" \
+                --set-default PLAYWRIGHT_HOST_PLATFORM_OVERRIDE "ubuntu-24.04" \
+                --set-default PLAYWRIGHT_MCP_BROWSER "chromium" \
+                --set-default PLAYWRIGHT_MCP_EXECUTABLE_PATH "${chromium-executable}"
+            '';
           };
         in
         {
