@@ -14,6 +14,11 @@
       url = "github:nicobailon/visual-explainer";
       flake = false;
     };
+
+    skillset-openai = {
+      url = "github:openai/skills";
+      flake = false;
+    };
   };
 
   outputs =
@@ -65,13 +70,16 @@
               cp -rf ${./skills}/* $out/skills/
 
               mkdir -p $out/skills/humanizer
-              cp -rf ${inputs.skill-humanizer}/* $out/skills/humanizer
+              cp -rf ${inputs.skill-humanizer}/* $out/skills/humanizer/
 
               mkdir -p $out/skills/visual-explainer
-              cp -rf ${inputs.skill-visual-explainer}/* $out/skills/visual-explainer
+              cp -rf ${inputs.skill-visual-explainer}/* $out/skills/visual-explainer/
 
               mkdir -p $out/skills/design-taste-frontend
-              cp -rf ${inputs.skill-design-taste-frontend}/SKILL.md $out/skills/design-taste-frontend
+              cp -rf ${inputs.skill-design-taste-frontend}/SKILL.md $out/skills/design-taste-frontend/
+
+              mkdir -p $out/skills/playwright
+              cp -rf ${inputs.skillset-openai}/skills/.curated/playwright/* $out/skills/playwright/
             '';
           });
         }

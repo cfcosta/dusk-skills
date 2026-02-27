@@ -21,7 +21,8 @@
         "nixpkgs": "nixpkgs",
         "skill-design-taste-frontend": "skill-design-taste-frontend",
         "skill-humanizer": "skill-humanizer",
-        "skill-visual-explainer": "skill-visual-explainer"
+        "skill-visual-explainer": "skill-visual-explainer",
+        "skillset-openai": "skillset-openai"
       }
     },
     "skill-design-taste-frontend": {
@@ -69,6 +70,22 @@
       "original": {
         "owner": "nicobailon",
         "repo": "visual-explainer",
+        "type": "github"
+      }
+    },
+    "skillset-openai": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1771646863,
+        "narHash": "sha256-E3U4ZGJh0CsEZbPj9r0g8KhFOepu3fSPjUroLhCVwns=",
+        "owner": "openai",
+        "repo": "skills",
+        "rev": "2c9ebb321958f64aa9414b46e4240901e2b9e1a9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "openai",
+        "repo": "skills",
         "type": "github"
       }
     }
