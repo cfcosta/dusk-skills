@@ -156,7 +156,7 @@ test("workflow executes fixer phase with latest arbiter output", async () => {
     ctx,
   );
 
-  assert.match(widgets.at(-1) ?? "", /arbiter-v1/);
+  assert.equal(widgets.at(-1), undefined);
   assert.match(sentMessages.at(-1) ?? "", /FIXER/);
   assert.match(sentMessages.at(-1) ?? "", /arbiter-v1/);
 });
