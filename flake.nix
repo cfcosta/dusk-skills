@@ -132,8 +132,9 @@
             src = self;
 
             buildPhase = ''
-              mkdir -p $out/extensions
+              mkdir -p $out/extensions $out/packages
               cp -rf ${./extensions}/bug-fix $out/extensions/
+              cp -rf ${./packages}/workflow-core $out/packages/
             '';
           };
 

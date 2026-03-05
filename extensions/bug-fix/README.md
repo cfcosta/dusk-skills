@@ -3,9 +3,10 @@
 ## Runtime modules
 
 - `index.ts`: extension bootstrap and API registration only.
-- `workflow.ts`: phase state machine and lifecycle rules.
-- `prompting.ts`: prompt file loading and prompt rendering.
-- `messages.ts`: input/output parsing helpers.
+- `workflow.ts`, `prompting.ts`, `messages.ts`: compatibility re-exports that point to `packages/workflow-core/src/bug-fix/*`.
+- `packages/workflow-core/src/bug-fix/workflow.ts`: phase state machine and lifecycle rules.
+- `packages/workflow-core/src/bug-fix/prompting.ts`: prompt file loading and prompt rendering.
+- `packages/workflow-core/src/bug-fix/messages.ts`: input/output parsing helpers.
 
 ## Lifecycle guarantees
 
