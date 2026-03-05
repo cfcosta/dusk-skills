@@ -159,6 +159,17 @@
             '';
           };
 
+          pi-refactor-safety = pkgs.stdenv.mkDerivation {
+            name = "pi-refactor-safety";
+            src = self;
+
+            buildPhase = ''
+              mkdir -p $out/extensions $out/packages
+              cp -rf ${./extensions}/refactor-safety $out/extensions/
+              cp -rf ${./packages}/workflow-core $out/packages/
+            '';
+          };
+
           default = pkgs.stdenv.mkDerivation (_: {
             name = "dusk-skills";
             src = self;
