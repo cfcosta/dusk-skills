@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@anthropic-ai/claude-code";
 import { loadPrompts } from "./prompting";
 import { BugFinderWorkflow } from "./workflow";
@@ -8,7 +9,8 @@ import { BugFinderWorkflow } from "./workflow";
  * the command remains registered and reports a clear startup error instead of throwing.
  */
 export default function bugFix(api: ExtensionAPI): void {
-  const promptDirectory = path.resolve(__dirname, "prompts");
+  const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+  const promptDirectory = path.resolve(moduleDirectory, "prompts");
   const workflow = new BugFinderWorkflow(api, () => loadPrompts(promptDirectory));
 
   api.registerCommand("bug-fix", {
