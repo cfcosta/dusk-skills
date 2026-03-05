@@ -7,6 +7,7 @@ Please **land the plane**:
 1. Run the **quality gates** for this application:
     - For JavaScript/Typescript projects, it is `oxfmt` and the actual build systems.
     - For Python projects, it is `ty` and `ruff`.
+    - For Rust projects, it is `cargo clippy --all --all-targets` and `cargo fmt`.
     - If inside a project with Nix, run it using `nix develop`.
 
 3. Create a `jujutsu` commit with `jj commit <changed paths> -m <message>`.
