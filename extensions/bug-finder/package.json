@@ -1,5 +1,5 @@
 {
-  "name": "@dusk/bug-finder-extension",
+  "name": "jj-bug-fix",
   "private": true,
   "version": "0.1.0",
   "type": "module",

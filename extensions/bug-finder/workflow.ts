@@ -67,14 +67,14 @@ export class BugFinderWorkflow {
 
     if (!this.prompts) {
       ctx.ui.notify(
-        `Bug finder is unavailable: ${this.startupError?.message ?? "prompt initialization failed."}`,
+        `Bug fix is unavailable: ${this.startupError?.message ?? "prompt initialization failed."}`,
         "error",
       );
       return { kind: "blocked", reason: "prompts_unavailable" };
     }
 
     if (this.state.phase !== "idle") {
-      ctx.ui.notify("Bug finder is already running. Finish or cancel the current run first.", "warning");
+      ctx.ui.notify("Bug fix is already running. Finish or cancel the current run first.", "warning");
       return { kind: "blocked", reason: "already_running" };
     }
 
@@ -103,7 +103,7 @@ export class BugFinderWorkflow {
     if (BLOCKED_TOOLS_IN_ANALYSIS.has(event.toolName ?? "")) {
       return {
         block: true,
-        reason: "Bug finder analysis phase: writes are disabled",
+        reason: "Bug fix analysis phase: writes are disabled",
       };
     }
   }
@@ -126,7 +126,7 @@ export class BugFinderWorkflow {
     this.state.emptyOutputRetries = 0;
 
     if (this.state.phase === "fixer") {
-      this.finishRun(ctx, "Bug finder workflow complete!");
+      this.finishRun(ctx, "Bug fix workflow complete!");
       return { kind: "ok" };
     }
 
@@ -192,7 +192,7 @@ export class BugFinderWorkflow {
       this.state.phase = "fixer";
       this.state.refinementAttempts = 0;
       this.updateStatus(ctx);
-      ctx.ui.setWidget("bug-finder", undefined);
+      ctx.ui.setWidget("bug-fix", undefined);
       this.sendPromptForPhase("fixer");
       return;
     }
@@ -204,7 +204,7 @@ export class BugFinderWorkflow {
       return;
     }
 
-    this.finishRun(ctx, "Bug finder cancelled.");
+    this.finishRun(ctx, "Bug fix cancelled.");
   }
 
   private handleMissingAssistantOutput(ctx: ExtensionContext): WorkflowResult {
@@ -213,7 +213,7 @@ export class BugFinderWorkflow {
     if (this.state.emptyOutputRetries > MAX_EMPTY_OUTPUT_RETRIES) {
       this.finishRun(
         ctx,
-        `Bug finder stopped: no assistant output captured after ${MAX_EMPTY_OUTPUT_RETRIES + 1} attempts.`,
+        `Bug fix stopped: no assistant output captured after ${MAX_EMPTY_OUTPUT_RETRIES + 1} attempts.`,
       );
       return { kind: "recoverable_error", reason: "max_empty_output_retries" };
     }
@@ -271,14 +271,14 @@ export class BugFinderWorkflow {
 
   private updateStatus(ctx: ExtensionContext) {
     if (this.state.phase === "idle") {
-      ctx.ui.setStatus("bug-finder", undefined);
-      ctx.ui.setWidget("bug-finder", undefined);
+      ctx.ui.setStatus("bug-fix", undefined);
+      ctx.ui.setWidget("bug-fix", undefined);
       return;
     }
 
     const phaseIndex = WORKFLOW_PHASES.indexOf(this.state.phase);
     const icon = this.state.phase === "fixer" ? "🔧" : "🔍";
-    ctx.ui.setStatus("bug-finder", `${icon} Phase ${phaseIndex}/4: ${PHASE_LABELS[this.state.phase]}`);
+    ctx.ui.setStatus("bug-fix", `${icon} Phase ${phaseIndex}/4: ${PHASE_LABELS[this.state.phase]}`);
   }
 }
 

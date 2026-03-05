@@ -2,7 +2,7 @@
 
 My personal collection of skills.
 
-## Bug finder extension
+## Bug fix extension
 
 The `extensions/bug-finder` module is self-contained:
 

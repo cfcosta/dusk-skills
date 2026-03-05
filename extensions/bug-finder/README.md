@@ -1,4 +1,4 @@
-# bug-finder extension
+# bug-fix extension
 
 ## Runtime modules
 

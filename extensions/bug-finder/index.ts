@@ -7,11 +7,11 @@ import { BugFinderWorkflow } from "./workflow";
  * Public extension entrypoint. Prompt initialization errors are handled gracefully:
  * the command remains registered and reports a clear startup error instead of throwing.
  */
-export default function bugFinder(api: ExtensionAPI): void {
+export default function bugFix(api: ExtensionAPI): void {
   const promptDirectory = path.resolve(__dirname, "prompts");
   const workflow = new BugFinderWorkflow(api, () => loadPrompts(promptDirectory));
 
-  api.registerCommand("bug-finder", {
+  api.registerCommand("bug-fix", {
     description: "Run the adversarial bug-finding workflow (4 phases)",
     handler: workflow.handleCommand.bind(workflow),
   });

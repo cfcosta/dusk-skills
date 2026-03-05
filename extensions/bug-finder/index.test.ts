@@ -185,7 +185,7 @@ test("workflow limits refinement attempts", async () => {
   }
 
   assert.equal(notifications.at(-1)?.level, "info");
-  assert.match(notifications.at(-1)?.message ?? "", /bug finder cancelled/i);
+  assert.match(notifications.at(-1)?.message ?? "", /bug fix cancelled/i);
 });
 
 test("analysis phases block write tools", async () => {
@@ -237,7 +237,7 @@ test("bugFinder registers command and event handlers", () => {
 
   bugFinder(api as never);
 
-  assert.ok(commands["bug-finder"]);
+  assert.ok(commands["bug-fix"]);
   assert.ok(listeners.tool_call);
   assert.ok(listeners.agent_end);
 });
