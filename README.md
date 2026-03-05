@@ -2,13 +2,13 @@
 
 My personal collection of skills.
 
-## Bug fix extension
+## Workflow-style extensions
 
-The `extensions/bug-fix` module is split into entrypoint + reusable workflow runtime:
+`extensions/bug-fix` and `extensions/owasp-fix` share the same reusable workflow runtime:
 
-- Extension entrypoint and bug-specific policy live in `extensions/bug-fix/*.ts`.
-- Shared workflow primitives live in `packages/workflow-core/src/*` (no bug-fix-specific modules).
-- Runtime prompts are co-located in `extensions/bug-fix/prompts/*.md`.
-- `packages.<system>.pi-bug-fix` in `flake.nix` copies both `extensions/bug-fix` and `packages/workflow-core`.
+- Extension entrypoints and domain-specific policy live in `extensions/*/*.ts`.
+- Shared workflow primitives live in `packages/workflow-core/src/*`.
+- Runtime prompts are co-located in each extension's `prompts/*.md`.
+- `packages.<system>.pi-bug-fix` and `packages.<system>.pi-owasp-fix` in `flake.nix` copy the chosen extension plus `packages/workflow-core`.
 
 This keeps prompt ownership explicit while enabling reuse across workflow-style extensions.

@@ -138,6 +138,17 @@
             '';
           };
 
+          pi-owasp-fix = pkgs.stdenv.mkDerivation {
+            name = "pi-owasp-fix";
+            src = self;
+
+            buildPhase = ''
+              mkdir -p $out/extensions $out/packages
+              cp -rf ${./extensions}/owasp-fix $out/extensions/
+              cp -rf ${./packages}/workflow-core $out/packages/
+            '';
+          };
+
           default = pkgs.stdenv.mkDerivation (_: {
             name = "dusk-skills";
             src = self;
