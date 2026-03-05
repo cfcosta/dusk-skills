@@ -95,7 +95,10 @@ export class BugFinderWorkflow {
     };
 
     this.updateStatus(ctx);
-    this.sendPromptForPhase("finder");
+    if (!this.sendPromptForPhase("finder", ctx)) {
+      return { kind: "recoverable_error", reason: "prompt_send_failed" };
+    }
+
     return { kind: "ok" };
   }
 
@@ -160,7 +163,7 @@ export class BugFinderWorkflow {
 
       this.state.phase = NEXT_ANALYSIS_PHASE[this.state.phase];
       this.updateStatus(ctx);
-      this.sendPromptForPhase(this.state.phase);
+      this.sendPromptForPhase(this.state.phase, ctx);
       return { kind: "ok" };
     }
 
@@ -213,14 +216,14 @@ export class BugFinderWorkflow {
       this.state.refinementAttempts = 0;
       this.updateStatus(ctx);
       ctx.ui.setWidget("bug-fix", undefined);
-      this.sendPromptForPhase("fixer");
+      this.sendPromptForPhase("fixer", ctx);
       return;
     }
 
     if (decision.kind === "refine" && decision.refinement) {
       this.state.refinementAttempts += 1;
       this.state.pendingRefinement = decision.refinement;
-      this.sendPromptForPhase("arbiter");
+      this.sendPromptForPhase("arbiter", ctx);
       return;
     }
 
@@ -244,13 +247,13 @@ export class BugFinderWorkflow {
     );
 
     if (isAnalysisPhase(this.state.phase) || this.state.phase === "fixer") {
-      this.sendPromptForPhase(this.state.phase);
+      this.sendPromptForPhase(this.state.phase, ctx);
     }
 
     return { kind: "recoverable_error", reason: "empty_output_retry" };
   }
 
-  private sendPromptForPhase(phase: AnalysisPhase | "fixer") {
+  private sendPromptForPhase(phase: AnalysisPhase | "fixer", ctx: ExtensionContext): boolean {
     const prompt = buildPrompt(
       phase,
       this.prompts!,
@@ -261,7 +264,24 @@ export class BugFinderWorkflow {
 
     this.state.pendingPrompt = prompt;
     this.state.awaitingResponse = true;
-    this.api.sendUserMessage(prompt);
+
+    try {
+      this.api.sendUserMessage(prompt);
+      return true;
+    } catch (error) {
+      this.state = {
+        phase: "idle",
+        reports: {},
+        refinementAttempts: 0,
+        emptyOutputRetries: 0,
+        pendingRefinement: undefined,
+        awaitingResponse: false,
+        pendingPrompt: undefined,
+      };
+      this.updateStatus(ctx);
+      ctx.ui.notify(`Bug fix stopped: failed to send prompt for phase '${phase}'.`, "error");
+      return false;
+    }
   }
 
   private refreshPromptSnapshot() {

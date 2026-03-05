@@ -10,14 +10,25 @@ import { loadPrompts } from "./prompting";
 
 type NotifyLevel = "info" | "warning" | "error";
 
-function createHarness(options?: { selectChoice?: string; editorValue?: string }) {
+function createHarness(options?: {
+  selectChoice?: string;
+  editorValue?: string;
+  failSendCount?: number;
+}) {
   const sentMessages: string[] = [];
   const notifications: Array<{ message: string; level: NotifyLevel }> = [];
   const statuses: Array<string | undefined> = [];
   const widgets: Array<string | undefined> = [];
 
+  let failSendCount = options?.failSendCount ?? 0;
+
   const api = {
     sendUserMessage(message: string) {
+      if (failSendCount > 0) {
+        failSendCount -= 1;
+        throw new Error("send failed");
+      }
+
       sentMessages.push(message);
     },
   };
@@ -190,6 +201,18 @@ test("workflow blocks rerun while active", async () => {
 
   assert.equal(notifications.at(-1)?.level, "warning");
   assert.match(notifications.at(-1)?.message ?? "", /already running/);
+});
+
+test("workflow recovers cleanly when sendUserMessage throws", async () => {
+  const { workflow, ctx, notifications } = createHarness({ failSendCount: 1 });
+
+  const firstRun = await workflow.handleCommand("", ctx);
+  assert.equal(firstRun.kind, "recoverable_error");
+  assert.equal(notifications.at(-1)?.level, "error");
+  assert.match(notifications.at(-1)?.message ?? "", /failed to send prompt/i);
+
+  const secondRun = await workflow.handleCommand("", ctx);
+  assert.equal(secondRun.kind, "ok");
 });
 
 test("workflow executes fixer phase with latest arbiter output", async () => {
