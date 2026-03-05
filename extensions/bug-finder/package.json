@@ -1,0 +1,9 @@
+{
+  "name": "@dusk/bug-finder-extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "0.0.81"
+  }
+}

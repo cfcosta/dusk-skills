@@ -1,6 +1,58 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractAssistantText, parseScopeArg } from "./index";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import bugFinder from "./index";
+import { BugFinderWorkflow } from "./workflow";
+import { extractAssistantText, parseScopeArg } from "./messages";
+import { loadPrompts } from "./prompting";
+
+type NotifyLevel = "info" | "warning" | "error";
+
+function createHarness(options?: { selectChoice?: string; editorValue?: string }) {
+  const sentMessages: string[] = [];
+  const notifications: Array<{ message: string; level: NotifyLevel }> = [];
+  const statuses: Array<string | undefined> = [];
+  const widgets: Array<string | undefined> = [];
+
+  const api = {
+    sendUserMessage(message: string) {
+      sentMessages.push(message);
+    },
+  };
+
+  const ctx = {
+    ui: {
+      notify(message: string, level: NotifyLevel) {
+        notifications.push({ message, level });
+      },
+      setStatus(_id: string, status: string | undefined) {
+        statuses.push(status);
+      },
+      setWidget(_id: string, widget: string | undefined) {
+        widgets.push(widget);
+      },
+      async select() {
+        return options?.selectChoice ?? "Cancel";
+      },
+      async editor() {
+        return options?.editorValue ?? "";
+      },
+    },
+  };
+
+  const prompts = {
+    finder: "FINDER",
+    skeptic: "SKEPTIC",
+    arbiter: "ARBITER",
+    fixer: "FIXER",
+  };
+
+  const workflow = new BugFinderWorkflow(api as never, () => ({ prompts }));
+
+  return { workflow, ctx: ctx as never, sentMessages, notifications, statuses, widgets };
+}
 
 test("parseScopeArg trims text arguments", () => {
   assert.equal(parseScopeArg("  src/lib  "), "src/lib");
@@ -33,4 +85,159 @@ test("extractAssistantText returns undefined when no text is present", () => {
   ]);
 
   assert.equal(result, undefined);
+});
+
+test("workflow advances through finder and skeptic phases", async () => {
+  const { workflow, ctx, sentMessages } = createHarness();
+
+  await workflow.handleCommand("  src  ", ctx);
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0], /FINDER/);
+  assert.match(sentMessages[0], /Focus on: src/);
+
+  await workflow.handleAgentEnd(
+    { messages: [{ role: "assistant", content: [{ type: "text", text: "bugs" }] }] },
+    ctx,
+  );
+  assert.equal(sentMessages.length, 2);
+  assert.match(sentMessages[1], /SKEPTIC/);
+  assert.match(sentMessages[1], /bugs/);
+
+  await workflow.handleAgentEnd(
+    { messages: [{ role: "assistant", content: [{ type: "text", text: "skeptic-notes" }] }] },
+    ctx,
+  );
+  assert.equal(sentMessages.length, 3);
+  assert.match(sentMessages[2], /ARBITER/);
+  assert.match(sentMessages[2], /skeptic-notes/);
+});
+
+test("workflow stops after bounded empty-output retries", async () => {
+  const { workflow, ctx, sentMessages, notifications } = createHarness();
+
+  await workflow.handleCommand("", ctx);
+  assert.equal(sentMessages.length, 1);
+
+  for (let i = 0; i < 3; i += 1) {
+    await workflow.handleAgentEnd(
+      { messages: [{ role: "assistant", content: [{ type: "tool_result", text: "nope" }] }] },
+      ctx,
+    );
+  }
+
+  assert.equal(notifications.at(-1)?.level, "info");
+  assert.match(notifications.at(-1)?.message ?? "", /stopped: no assistant output/);
+});
+
+test("workflow blocks rerun while active", async () => {
+  const { workflow, ctx, notifications } = createHarness();
+
+  await workflow.handleCommand("first", ctx);
+  await workflow.handleCommand("second", ctx);
+
+  assert.equal(notifications.at(-1)?.level, "warning");
+  assert.match(notifications.at(-1)?.message ?? "", /already running/);
+});
+
+test("workflow executes fixer phase with latest arbiter output", async () => {
+  const { workflow, ctx, sentMessages, widgets } = createHarness({ selectChoice: "Execute fixes (TDD workflow)" });
+
+  await workflow.handleCommand("", ctx);
+  await workflow.handleAgentEnd(
+    { messages: [{ role: "assistant", content: [{ type: "text", text: "finder-report" }] }] },
+    ctx,
+  );
+  await workflow.handleAgentEnd(
+    { messages: [{ role: "assistant", content: [{ type: "text", text: "skeptic-report" }] }] },
+    ctx,
+  );
+  await workflow.handleAgentEnd(
+    { messages: [{ role: "assistant", content: [{ type: "text", text: "arbiter-v1" }] }] },
+    ctx,
+  );
+
+  assert.match(widgets.at(-1) ?? "", /arbiter-v1/);
+  assert.match(sentMessages.at(-1) ?? "", /FIXER/);
+  assert.match(sentMessages.at(-1) ?? "", /arbiter-v1/);
+});
+
+test("workflow limits refinement attempts", async () => {
+  const { workflow, ctx, notifications } = createHarness({
+    selectChoice: "Refine the analysis",
+    editorValue: "make it sharper",
+  });
+
+  await workflow.handleCommand("", ctx);
+  await workflow.handleAgentEnd(
+    { messages: [{ role: "assistant", content: [{ type: "text", text: "finder-report" }] }] },
+    ctx,
+  );
+  await workflow.handleAgentEnd(
+    { messages: [{ role: "assistant", content: [{ type: "text", text: "skeptic-report" }] }] },
+    ctx,
+  );
+
+  for (let i = 0; i < 4; i += 1) {
+    await workflow.handleAgentEnd(
+      { messages: [{ role: "assistant", content: [{ type: "text", text: `arbiter-${i}` }] }] },
+      ctx,
+    );
+  }
+
+  assert.equal(notifications.at(-1)?.level, "info");
+  assert.match(notifications.at(-1)?.message ?? "", /bug finder cancelled/i);
+});
+
+test("analysis phases block write tools", async () => {
+  const { workflow, ctx } = createHarness();
+
+  await workflow.handleCommand("", ctx);
+  const result = await workflow.handleToolCall({ toolName: "Write" });
+
+  assert.equal(result?.block, true);
+});
+
+test("loadPrompts loads prompt bundle from a valid directory", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bug-finder-prompts-"));
+  fs.writeFileSync(path.join(tempDir, "finder.md"), "finder");
+  fs.writeFileSync(path.join(tempDir, "skeptic.md"), "skeptic");
+  fs.writeFileSync(path.join(tempDir, "arbiter.md"), "arbiter");
+  fs.writeFileSync(path.join(tempDir, "fixer.md"), "fixer");
+
+  const result = loadPrompts(tempDir);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.prompts?.finder, "finder");
+});
+
+test("loadPrompts returns structured error when files are missing", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bug-finder-prompts-missing-"));
+  fs.writeFileSync(path.join(tempDir, "finder.md"), "finder");
+
+  const result = loadPrompts(tempDir);
+
+  assert.equal(result.prompts, undefined);
+  assert.equal(result.error?.code, "PROMPT_READ_FAILED");
+  assert.match(result.error?.message ?? "", /failed to load prompt bundle/);
+});
+
+test("bugFinder registers command and event handlers", () => {
+  const commands: Record<string, { handler: (args: unknown, ctx: unknown) => Promise<unknown> }> = {};
+  const listeners: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+
+  const api = {
+    registerCommand(name: string, config: { handler: (args: unknown, ctx: unknown) => Promise<unknown> }) {
+      commands[name] = config;
+    },
+    on(name: string, handler: (...args: unknown[]) => Promise<unknown>) {
+      listeners[name] = handler;
+    },
+    sendUserMessage() {},
+  };
+
+  bugFinder(api as never);
+
+  assert.ok(commands["bug-finder"]);
+  assert.ok(listeners.tool_call);
+  assert.ok(listeners.agent_end);
 });
