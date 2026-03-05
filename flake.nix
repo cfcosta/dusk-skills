@@ -70,7 +70,12 @@
         let
           browsers = (builtins.fromJSON (builtins.readFile "${pkgs.playwright-driver}/browsers.json")).browsers;
           chromium-rev = (builtins.head (builtins.filter (x: x.name == "chromium") browsers)).revision;
-          chromium-executable = "${pkgs.playwright-driver.browsers}/chromium-${toString chromium-rev}/chrome-linux64/chrome";
+          chromium-executable-relative =
+            if pkgs.stdenv.isDarwin then
+              "chrome-mac/Chromium.app/Contents/MacOS/Chromium"
+            else
+              "chrome-linux64/chrome";
+          chromium-executable = "${pkgs.playwright-driver.browsers}/chromium-${toString chromium-rev}/${chromium-executable-relative}";
 
           playwright-cli-unwrapped = pkgs.buildNpmPackage {
             pname = "playwright-cli";
