@@ -65,11 +65,6 @@ const DEFAULT_BLOCKED_TOOLS_IN_ANALYSIS = new Set([
   "edit",
   "write",
   "multiedit",
-  "bash",
-  "sh",
-  "shell",
-  "terminal",
-  "execute",
 ]);
 
 export class PhaseWorkflow<Prompts> {
