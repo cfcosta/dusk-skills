@@ -93,9 +93,11 @@
               wrapProgram $out/bin/playwright-cli \
                 --set-default PLAYWRIGHT_BROWSERS_PATH "${pkgs.playwright-driver.browsers}" \
                 --set-default PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS "true" \
-                --set-default PLAYWRIGHT_HOST_PLATFORM_OVERRIDE "ubuntu-24.04" \
                 --set-default PLAYWRIGHT_MCP_BROWSER "chromium" \
-                --set-default PLAYWRIGHT_MCP_EXECUTABLE_PATH "${chromium-executable}"
+                --set-default PLAYWRIGHT_MCP_EXECUTABLE_PATH "${chromium-executable}" \
+                ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+                  --set-default PLAYWRIGHT_HOST_PLATFORM_OVERRIDE "ubuntu-24.04"
+                ''}
             '';
           };
 
