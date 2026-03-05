@@ -24,6 +24,11 @@
       url = "github:openai/skills";
       flake = false;
     };
+
+    desloppify-src = {
+      url = "github:peteromallet/desloppify";
+      flake = false;
+    };
   };
 
   outputs =
@@ -88,9 +93,27 @@
                 --set-default PLAYWRIGHT_MCP_EXECUTABLE_PATH "${chromium-executable}"
             '';
           };
+
+          desloppify = pkgs.python3Packages.buildPythonApplication {
+            pname = "desloppify";
+            version = inputs.desloppify-src.shortRev;
+            pyproject = true;
+            src = inputs.desloppify-src;
+
+            build-system = [ pkgs.python3Packages.setuptools ];
+
+            dependencies = with pkgs.python3Packages; [
+              tree-sitter-language-pack
+              bandit
+              defusedxml
+              pillow
+            ];
+
+            pythonImportsCheck = [ "desloppify" ];
+          };
         in
         {
-          inherit playwright-cli;
+          inherit playwright-cli desloppify;
 
           pi-bug-fix = pkgs.stdenv.mkDerivation {
             name = "pi-bug-fix";
@@ -132,6 +155,12 @@
 
               substituteInPlace $out/skills/playwright/SKILL.md \
                 --replace-fail '##PLAYWRIGHT-CLI##' '${playwright-cli}/bin/playwright-cli'
+
+              mkdir -p $out/skills/desloppify
+              cp -rf ${./skills}/desloppify/SKILL.md $out/skills/desloppify/
+
+              substituteInPlace $out/skills/desloppify/SKILL.md \
+                --replace-fail '##DESLOPPIFY##' '${desloppify}/bin/desloppify'
             '';
           });
         }

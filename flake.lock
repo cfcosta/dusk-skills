@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "desloppify-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1772659711,
+        "narHash": "sha256-agCFj3mixkGW+z4hADplScO+KL24jgL/3oNmKcYnGbI=",
+        "owner": "peteromallet",
+        "repo": "desloppify",
+        "rev": "6eb2065fd4b991b88988a0905f6da29ff4216bd8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "peteromallet",
+        "repo": "desloppify",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1771848320,
@@ -34,6 +50,7 @@
     },
     "root": {
       "inputs": {
+        "desloppify-src": "desloppify-src",
         "nixpkgs": "nixpkgs",
         "playwright-cli": "playwright-cli",
         "skill-design-taste-frontend": "skill-design-taste-frontend",
