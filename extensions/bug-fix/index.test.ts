@@ -198,7 +198,7 @@ test("analysis phases block write tools", async () => {
 });
 
 test("loadPrompts loads prompt bundle from a valid directory", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bug-finder-prompts-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bug-fix-prompts-"));
   fs.writeFileSync(path.join(tempDir, "finder.md"), "finder");
   fs.writeFileSync(path.join(tempDir, "skeptic.md"), "skeptic");
   fs.writeFileSync(path.join(tempDir, "arbiter.md"), "arbiter");
@@ -211,7 +211,7 @@ test("loadPrompts loads prompt bundle from a valid directory", () => {
 });
 
 test("loadPrompts returns structured error when files are missing", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bug-finder-prompts-missing-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bug-fix-prompts-missing-"));
   fs.writeFileSync(path.join(tempDir, "finder.md"), "finder");
 
   const result = loadPrompts(tempDir);

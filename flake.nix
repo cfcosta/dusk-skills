@@ -121,7 +121,7 @@
 
             buildPhase = ''
               mkdir -p $out/extensions
-              cp -rf ${./extensions}/bug-finder $out/extensions/
+              cp -rf ${./extensions}/bug-fix $out/extensions/
             '';
           };
 
