@@ -1,40 +1,244 @@
 # duskpi
 
-My personal configuration of the [pi coding agent](https://pi.dev).
+`duskpi` is a Nix-packaged Pi distribution.
 
-This flake packages Pi together with this repo's bundled extensions, skills, prompts, and themes.
+Instead of treating Pi as a bare upstream binary and layering configuration on top, this repo ships a ready-to-run Pi package with opinionated workflows, prompts, skills, and themes already bundled.
 
-## Package
+If you want a Pi that comes with structured bug-fixing, refactor review, security review, planning mode, curated skills, and Catppuccin themes out of the box, this is the package.
 
-The main output is `packages.<system>.default`, a wrapped Pi package that includes:
+## What this distribution includes
 
-- `bin/pi`
-- `extensions/`
-- `packages/`
-- `skills/`
-- `prompts/`
-- `themes/`
+The default package bundles upstream Pi together with repo-owned resources:
 
-The wrapper also preloads the bundled extensions, skills, prompt templates, and themes, so `nix run .#` works without any extra Pi settings. A bundled theme extension reads the package's `pi.theme` and activates it on startup.
+- **Workflow extensions**
+  - `/bug-fix`
+  - `/owasp-fix`
+  - `/test-audit`
+  - `/refactor-safety`
+- **Planning extension**
+  - `/plan`
+  - `/todos`
+- **Prompt templates**
+  - `/innovate`
+  - `/jj-commit`
+- **Skills**
+  - `design-taste-frontend`
+  - `desloppify`
+  - `humanizer`
+  - `playwright`
+  - `rust-proptest`
+  - `visual-explainer`
+- **Themes**
+  - `catppuccin-latte`
+  - `catppuccin-frappe`
+  - `catppuccin-macchiato`
+  - `catppuccin-mocha`
 
-## Themes
+It also activates `catppuccin-mocha` automatically at startup through a bundled extension.
 
-This package also ships Catppuccin themes for Pi under `themes/`:
+## What makes it a distribution
 
-- `catppuccin-latte`
-- `catppuccin-frappe`
-- `catppuccin-macchiato`
-- `catppuccin-mocha`
+The package is not just a folder of extras.
 
-These are copied into the default Nix package output so Pi can discover them as package themes.
+`packages.<system>.default` wraps upstream Pi and preloads the bundled resources so they are available immediately when you run it. That means `nix run .#` behaves like a complete Pi environment, not a half-configured base install.
 
-## Workflow-style extensions
+In practice, the distribution gives you:
 
-`extensions/bug-fix`, `extensions/owasp-fix`, `extensions/test-audit`, and `extensions/refactor-safety` share the same reusable workflow runtime:
+- a `pi` binary
+- bundled extensions under `extensions/`
+- bundled prompt templates under `prompts/`
+- bundled skills under `skills/`
+- bundled themes under `themes/`
+- package metadata that Pi can understand
+- startup wiring so the important resources are loaded automatically
 
-- Extension entrypoints and domain-specific policy live in `extensions/*/*.ts`.
-- Shared workflow primitives live in `packages/workflow-core/src/*`.
-- Runtime prompts are co-located in each extension's `prompts/*.md`.
-- `packages.<system>.default` in `flake.nix` wraps the `pi` package from `numtide/llm-agents.nix` together with all bundled Pi resources from this repo.
+## Quick start
 
-This keeps prompt ownership explicit while shipping a single Pi package with the expected behavior.
+Run it directly from this repo:
+
+```bash
+nix run .#
+```
+
+Or build the package first:
+
+```bash
+nix build .#
+./result/bin/pi
+```
+
+If you want to install it into your profile:
+
+```bash
+nix profile install .#
+pi
+```
+
+## What you can do with it
+
+### 1. Use structured workflows instead of one-off prompts
+
+This distribution ships several multi-step extensions that guide Pi through more deliberate workflows.
+
+#### `/bug-fix`
+
+Runs an adversarial bug-finding and fixing workflow.
+
+Use it when you want Pi to:
+
+- search for likely defects first
+- challenge its own findings
+- arbitrate which bugs are real
+- then implement fixes
+
+#### `/owasp-fix`
+
+Security-focused workflow around OWASP-style findings.
+
+Use it when you want Pi to:
+
+- inspect code for security issues
+- reduce false positives through adversarial review
+- only fix issues that survive scrutiny
+
+#### `/test-audit`
+
+Test-gap and test-quality workflow.
+
+Use it when you want Pi to:
+
+- inspect what is untested
+- challenge weak test ideas
+- produce a tighter, verified testing plan
+- then implement tests or fixes
+
+#### `/refactor-safety`
+
+Refactor workflow with explicit skepticism before execution.
+
+Use it when you want Pi to:
+
+- map refactor candidates
+- challenge whether they are actually worth doing
+- narrow the blast radius
+- then execute only the approved refactor plan
+
+These workflow-style extensions share a common runtime in `packages/workflow-core/`, so they behave consistently.
+
+### 2. Switch into explicit planning mode
+
+The bundled `pi-plan` extension adds:
+
+- `/plan`
+- `/todos`
+
+Use `/plan` when you want Pi to stay read-only while it investigates and proposes an execution plan. Once the plan looks right, you can approve implementation.
+
+This is useful when you want:
+
+- more safety before edits
+- a concrete step list
+- a review point before execution
+
+### 3. Use prompt templates for recurring tasks
+
+The distribution ships prompt templates that expand into reusable workflows.
+
+- `/innovate` for ideation and solution exploration
+- `/jj-commit` for commit-message and jujutsu-oriented commit flow guidance
+
+These are available immediately because the package preloads them.
+
+### 4. Use specialized skills without extra setup
+
+The bundled skills cover common high-value tasks:
+
+- **design-taste-frontend** for stronger UI/UX and frontend design decisions
+- **desloppify** for code health and technical debt review
+- **humanizer** for making generated text sound less AI-written
+- **playwright** for browser automation and UI debugging
+- **rust-proptest** for Rust property testing
+- **visual-explainer** for turning complex technical material into visual HTML explainers
+
+## Startup behavior
+
+This package intentionally changes startup from “plain Pi” to “distro Pi”.
+
+When `pi` starts from this package, the wrapper preloads bundled resources so commands and templates are available without needing a separate local Pi setup.
+
+That is why commands like these should be present right away:
+
+- `/bug-fix`
+- `/owasp-fix`
+- `/test-audit`
+- `/refactor-safety`
+- `/plan`
+- `/todos`
+- `/innovate`
+
+The Catppuccin theme is also activated from package metadata via the bundled `pi-catppuccin` extension.
+
+## Repository layout
+
+### `extensions/`
+
+Pi extensions bundled into the distribution.
+
+Notable entries:
+
+- `bug-fix`
+- `owasp-fix`
+- `test-audit`
+- `refactor-safety`
+- `pi-catppuccin`
+- `pi-plan` (vendored from `devkade/pi-plan` and built in Nix)
+
+### `packages/workflow-core/`
+
+Shared runtime used by the workflow-style extensions.
+
+This holds the reusable orchestration pieces for:
+
+- prompt loading
+- workflow phases
+- message parsing
+- extension-facing abstractions
+
+### `prompts/`
+
+Prompt templates loaded by Pi.
+
+### `skills/`
+
+Bundled skill directories and curated skill integrations.
+
+### `themes/`
+
+Catppuccin themes shipped as Pi theme files.
+
+## Nix design
+
+This repo is built as a flake and exposes a package per supported system.
+
+The flake:
+
+- pulls upstream Pi from `numtide/llm-agents.nix`
+- builds third-party resources needed by this distribution
+- vendors local extensions, skills, prompts, and themes into one output
+- wraps the final `pi` binary so bundled resources are loaded on startup
+
+`pi-plan` is included as a flake input and built inside Nix, then re-exported as part of this distribution's bundled extensions.
+
+## Why this repo exists
+
+The goal is not to fork Pi.
+
+The goal is to ship a sharper default Pi:
+
+- more structured workflows
+- better prompting ergonomics
+- stronger review and planning modes
+- good built-in themes
+- one installable package instead of a pile of ad hoc setup
+
+If upstream Pi is the base terminal coding harness, `duskpi` is a batteries-included distribution on top of it.

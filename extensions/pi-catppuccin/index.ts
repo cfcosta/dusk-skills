@@ -31,16 +31,22 @@ function readThemeFromPackage(): string | undefined {
   const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
   let current = moduleDirectory;
 
-  while (current !== path.dirname(current)) {
+  while (true) {
     const packageJsonPath = path.join(current, "package.json");
     if (fs.existsSync(packageJsonPath)) {
       const packageJson = JSON.parse(
         fs.readFileSync(packageJsonPath, "utf8"),
       ) as ThemePackageManifest;
-      return packageJson.pi?.theme;
+      const themeName = packageJson.pi?.theme;
+      if (themeName) {
+        return themeName;
+      }
     }
-    current = path.dirname(current);
-  }
 
-  return undefined;
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
 }
