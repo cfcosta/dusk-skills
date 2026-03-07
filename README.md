@@ -4,12 +4,11 @@ My personal collection of skills.
 
 ## Home Manager module
 
-This flake exports a Home Manager module at `homeModules.default` (also aliased as `homeManagerModules.default`). It mirrors the AI setup from my `home.nix` config:
+This flake exports a Home Manager module at `homeModules.default` (also aliased as `homeManagerModules.default`). It is focused on Pi itself:
 
-- installs `pi`, `claude-code`, `codex`, `gemini-cli`, `opencode`, `crush`, and `beads`
+- installs a Pi package that already bundles the repo's extensions, skills, prompts, and themes
 - writes `~/.pi/agent/settings.json`
-- registers the bundled Pi packages from this repo
-- links the bundled skills into `~/.claude/skills` and `~/.codex/skills`
+- registers that same installed package in Pi's `packages` setting
 - can activate one of the bundled Catppuccin Pi themes
 
 Example:
@@ -26,6 +25,15 @@ Example:
 }
 ```
 
+By default, `programs.pi.package` points to `packages.<system>.default`, a wrapped Pi package that includes:
+
+- `bin/pi`
+- `extensions/`
+- `packages/`
+- `skills/`
+- `prompts/`
+- `themes/`
+
 ## Themes
 
 This package also ships Catppuccin themes for Pi under `themes/`:
@@ -39,11 +47,11 @@ These are copied into the default Nix package output so Pi can discover them as 
 
 ## Workflow-style extensions
 
-`extensions/bug-fix`, `extensions/owasp-fix`, and `extensions/test-audit` share the same reusable workflow runtime:
+`extensions/bug-fix`, `extensions/owasp-fix`, `extensions/test-audit`, and `extensions/refactor-safety` share the same reusable workflow runtime:
 
 - Extension entrypoints and domain-specific policy live in `extensions/*/*.ts`.
 - Shared workflow primitives live in `packages/workflow-core/src/*`.
 - Runtime prompts are co-located in each extension's `prompts/*.md`.
-- `packages.<system>.pi-bug-fix`, `packages.<system>.pi-owasp-fix`, and `packages.<system>.pi-test-audit` in `flake.nix` copy the chosen extension plus `packages/workflow-core`.
+- `packages.<system>.default` in `flake.nix` wraps the `pi` package from `numtide/llm-agents.nix` together with all bundled Pi resources from this repo.
 
-This keeps prompt ownership explicit while enabling reuse across workflow-style extensions.
+This keeps prompt ownership explicit while shipping a single Pi package with the expected behavior.

@@ -25,7 +25,7 @@ let
   baseSettings = {
     defaultProvider = cfg.defaultProvider;
     defaultModel = cfg.defaultModel;
-    packages = map toString cfg.piPackages;
+    packages = [ (toString cfg.package) ];
   }
   // optionalAttrs (resolvedTheme != null) {
     theme = resolvedTheme;
@@ -37,22 +37,20 @@ in
 
     package = mkOption {
       type = types.package;
-      default = pkgs.pi;
-      description = "Pi package to install in the user environment.";
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      description = "Pi package to install in the user environment and register in Pi settings.";
     };
 
     toolPackages = mkOption {
       type = types.listOf types.package;
       default = with pkgs; [
         beads
-        claude-code
-        codex
         crush
         gemini-cli
         opencode
       ];
-      defaultText = lib.literalExpression "with pkgs; [ beads claude-code codex crush gemini-cli opencode ]";
-      description = "Packages installed into home.packages for the AI tooling setup.";
+      defaultText = lib.literalExpression "with pkgs; [ beads crush gemini-cli opencode ]";
+      description = "Extra AI tooling packages installed into home.packages alongside Pi.";
     };
 
     defaultProvider = mkOption {
@@ -65,17 +63,6 @@ in
       type = types.str;
       default = "gpt-5.4";
       description = "Default Pi model written to ~/.pi/agent/settings.json.";
-    };
-
-    piPackages = mkOption {
-      type = types.listOf types.package;
-      default = let packages = self.packages.${pkgs.stdenv.hostPlatform.system}; in [
-        packages.default
-        packages.pi-bug-fix
-        packages.pi-owasp-fix
-        packages.pi-test-audit
-      ];
-      description = "Pi package paths added to the settings.json packages list.";
     };
 
     settings = mkOption {
@@ -106,7 +93,7 @@ in
 
       package = mkOption {
         type = types.package;
-        default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        default = cfg.package;
         description = "Package providing the Catppuccin Pi theme files.";
       };
     };
@@ -117,16 +104,6 @@ in
 
     home.file = {
       ".pi/agent/settings.json".text = builtins.toJSON (recursiveUpdate baseSettings cfg.settings);
-
-      ".claude/skills" = {
-        source = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/skills";
-        recursive = true;
-      };
-
-      ".codex/skills" = {
-        source = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/skills";
-        recursive = true;
-      };
     }
     // optionalAttrs cfg.catppuccin.enable {
       ".pi/agent/themes/catppuccin-${flavor}.json".source =

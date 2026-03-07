@@ -28,6 +28,11 @@
       url = "github:openai/skills";
       flake = false;
     };
+
+    llm-agents = {
+      url = "github:numtide/llm-agents.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -72,7 +77,7 @@
       formatter = forEachSupportedSystem ({ pkgs, ... }: pkgs.oxfmt);
 
       packages = forEachSupportedSystem (
-        { pkgs, ... }:
+        { pkgs, system, ... }:
         let
           browsers =
             (builtins.fromJSON (builtins.readFile "${pkgs.playwright-driver}/browsers.json")).browsers;
@@ -126,60 +131,18 @@
             pythonImportsCheck = [ "desloppify" ];
           };
         in
-        {
+        rec {
           inherit playwright-cli desloppify;
 
-          pi-bug-fix = pkgs.stdenv.mkDerivation {
-            name = "pi-bug-fix";
+          resources = pkgs.stdenv.mkDerivation (_: {
+            name = "dusk-skills-resources";
             src = self;
 
             buildPhase = ''
-              mkdir -p $out/extensions $out/packages
-              cp -rf ${./extensions}/bug-fix $out/extensions/
-              cp -rf ${./packages}/workflow-core $out/packages/
-            '';
-          };
+              mkdir -p $out/{extensions,packages,prompts,skills,themes,share/pi/themes}
 
-          pi-owasp-fix = pkgs.stdenv.mkDerivation {
-            name = "pi-owasp-fix";
-            src = self;
-
-            buildPhase = ''
-              mkdir -p $out/extensions $out/packages
-              cp -rf ${./extensions}/owasp-fix $out/extensions/
-              cp -rf ${./packages}/workflow-core $out/packages/
-            '';
-          };
-
-          pi-test-audit = pkgs.stdenv.mkDerivation {
-            name = "pi-test-audit";
-            src = self;
-
-            buildPhase = ''
-              mkdir -p $out/extensions $out/packages
-              cp -rf ${./extensions}/test-audit $out/extensions/
-              cp -rf ${./packages}/workflow-core $out/packages/
-            '';
-          };
-
-          pi-refactor-safety = pkgs.stdenv.mkDerivation {
-            name = "pi-refactor-safety";
-            src = self;
-
-            buildPhase = ''
-              mkdir -p $out/extensions $out/packages
-              cp -rf ${./extensions}/refactor-safety $out/extensions/
-              cp -rf ${./packages}/workflow-core $out/packages/
-            '';
-          };
-
-          default = pkgs.stdenv.mkDerivation (_: {
-            name = "dusk-skills";
-            src = self;
-
-            buildPhase = ''
-              mkdir -p $out/{prompts,skills,themes,share/pi/themes}
-
+              cp -rf ${./extensions}/* $out/extensions/
+              cp -rf ${./packages}/* $out/packages/
               cp -rf ${./prompts}/* $out/prompts/
               cp -rf ${./themes}/* $out/themes/
               cp -rf ${./themes}/* $out/share/pi/themes/
@@ -208,6 +171,11 @@
                 --replace-fail '##DESLOPPIFY##' '${desloppify}/bin/desloppify'
             '';
           });
+
+          default = pkgs.symlinkJoin {
+            name = "pi-with-dusk-skills";
+            paths = [ inputs.llm-agents.packages.${system}.pi resources ];
+          };
         }
       );
     };
