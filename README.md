@@ -34,7 +34,7 @@ By default, `programs.pi.package` points to `packages.<system>.default`, a wrapp
 - `prompts/`
 - `themes/`
 
-The wrapper also preloads the bundled extensions, skills, prompt templates, and themes, so `nix run .#` works without any extra Pi settings. A bundled theme extension reads the package's `pi.defaultTheme` and activates it on startup.
+The wrapper also preloads the bundled extensions, skills, prompt templates, and themes, so `nix run .#` works without any extra Pi settings. A bundled theme extension reads the package's `pi.theme` and activates it on startup.
 
 ## Themes
 

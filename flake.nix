@@ -176,7 +176,7 @@
                 "private": true,
                 "keywords": ["pi-package"],
                 "pi": {
-                  "defaultTheme": "catppuccin-mocha",
+                  "theme": "catppuccin-mocha",
                   "extensions": [
                     "./extensions/*/index.ts"
                   ],

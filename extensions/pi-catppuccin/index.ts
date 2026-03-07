@@ -6,13 +6,13 @@ import type { ExtensionAPI } from "../../packages/workflow-core/src/index";
 
 interface ThemePackageManifest {
   pi?: {
-    defaultTheme?: string;
+    theme?: string;
   };
 }
 
 export default function themeDefault(api: ExtensionAPI): void {
   api.on("session_start", async (_event, ctx) => {
-    const themeName = readDefaultThemeFromPackage();
+    const themeName = readThemeFromPackage();
     if (!themeName) {
       return;
     }
@@ -27,7 +27,7 @@ export default function themeDefault(api: ExtensionAPI): void {
   });
 }
 
-function readDefaultThemeFromPackage(): string | undefined {
+function readThemeFromPackage(): string | undefined {
   const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
   let current = moduleDirectory;
 
@@ -37,7 +37,7 @@ function readDefaultThemeFromPackage(): string | undefined {
       const packageJson = JSON.parse(
         fs.readFileSync(packageJsonPath, "utf8"),
       ) as ThemePackageManifest;
-      return packageJson.pi?.defaultTheme;
+      return packageJson.pi?.theme;
     }
     current = path.dirname(current);
   }
