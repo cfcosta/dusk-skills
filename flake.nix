@@ -7,6 +7,11 @@
       flake = false;
     };
 
+    pi-plan = {
+      url = "github:devkade/pi-plan";
+      flake = false;
+    };
+
     skill-design-taste-frontend = {
       url = "github:Leonxlnx/taste-skill";
       flake = false;
@@ -58,9 +63,6 @@
         );
     in
     {
-      homeManagerModules.default = import ./modules/home-manager.nix { inherit self; };
-      homeModules.default = self.homeManagerModules.default;
-
       devShells = forEachSupportedSystem (
         { pkgs, system }:
         {
@@ -130,9 +132,23 @@
 
             pythonImportsCheck = [ "desloppify" ];
           };
+
+          pi-plan-extension = pkgs.buildNpmPackage {
+            pname = "pi-plan";
+            version = inputs.pi-plan.shortRev;
+            src = inputs.pi-plan;
+            npmDepsHash = "sha256-Ht1vEL2dJDXzKhDPn1Vvv6d3zZ0YLeDQVtP0l2fz0NQ=";
+            dontNpmBuild = true;
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out
+              cp -r package.json package-lock.json README.md plan.md tsconfig.json src $out/
+              runHook postInstall
+            '';
+          };
         in
         rec {
-          inherit playwright-cli desloppify;
+          inherit playwright-cli desloppify pi-plan-extension;
 
           resources = pkgs.stdenv.mkDerivation (_: {
             name = "duskpi-resources";
@@ -142,6 +158,11 @@
               mkdir -p $out/{extensions,packages,prompts,skills,themes,share/pi/themes}
 
               cp -rf ${./extensions}/* $out/extensions/
+              mkdir -p $out/extensions/pi-plan
+              cp -rf ${pi-plan-extension}/* $out/extensions/pi-plan/
+              cat > $out/extensions/pi-plan/index.ts <<'EOF'
+              export { default } from "./src/index.ts";
+              EOF
               cp -rf ${./packages}/* $out/packages/
               cp -rf ${./prompts}/* $out/prompts/
               cp -rf ${./themes}/* $out/themes/
@@ -209,6 +230,7 @@
                 --add-flags "--extension $out/extensions/refactor-safety/index.ts" \
                 --add-flags "--extension $out/extensions/test-audit/index.ts" \
                 --add-flags "--extension $out/extensions/pi-catppuccin/index.ts" \
+                --add-flags "--extension $out/extensions/pi-plan/index.ts" \
                 --add-flags "--skill $out/skills" \
                 --add-flags "--prompt-template $out/prompts" \
                 --add-flags "--theme $out/themes"

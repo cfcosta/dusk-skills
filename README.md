@@ -2,30 +2,11 @@
 
 My personal configuration of the [pi coding agent](https://pi.dev).
 
-## Home Manager module
+This flake packages Pi together with this repo's bundled extensions, skills, prompts, and themes.
 
-This flake exports a Home Manager module at `homeModules.default` (also aliased as `homeManagerModules.default`). It is focused on Pi itself:
+## Package
 
-- installs a Pi package that already bundles the repo's extensions, skills, prompts, and themes
-- writes `~/.pi/agent/settings.json`
-- registers that same installed package in Pi's `packages` setting
-- can activate one of the bundled Catppuccin Pi themes
-
-Example:
-
-```nix
-{
-  imports = [ inputs.duskpi.homeModules.default ];
-
-  programs.pi = {
-    enable = true;
-    catppuccin.enable = true;
-    # or: theme = "catppuccin-mocha";
-  };
-}
-```
-
-By default, `programs.pi.package` points to `packages.<system>.default`, a wrapped Pi package that includes:
+The main output is `packages.<system>.default`, a wrapped Pi package that includes:
 
 - `bin/pi`
 - `extensions/`
