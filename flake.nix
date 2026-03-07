@@ -169,6 +169,28 @@
 
               substituteInPlace $out/skills/desloppify/SKILL.md \
                 --replace-fail '##DESLOPPIFY##' '${desloppify}/bin/desloppify'
+
+              cat > $out/package.json <<'EOF'
+              {
+                "name": "duskpi",
+                "private": true,
+                "keywords": ["pi-package"],
+                "pi": {
+                  "extensions": [
+                    "./extensions/*/index.ts"
+                  ],
+                  "skills": [
+                    "./skills"
+                  ],
+                  "prompts": [
+                    "./prompts"
+                  ],
+                  "themes": [
+                    "./themes"
+                  ]
+                }
+              }
+              EOF
             '';
           });
 
@@ -178,6 +200,17 @@
               inputs.llm-agents.packages.${system}.pi
               resources
             ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            postBuild = ''
+              wrapProgram $out/bin/pi \
+                --add-flags "--extension $out/extensions/bug-fix/index.ts" \
+                --add-flags "--extension $out/extensions/owasp-fix/index.ts" \
+                --add-flags "--extension $out/extensions/refactor-safety/index.ts" \
+                --add-flags "--extension $out/extensions/test-audit/index.ts" \
+                --add-flags "--skill $out/skills" \
+                --add-flags "--prompt-template $out/prompts" \
+                --add-flags "--theme $out/themes"
+            '';
           };
         }
       );

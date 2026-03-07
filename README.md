@@ -34,6 +34,8 @@ By default, `programs.pi.package` points to `packages.<system>.default`, a wrapp
 - `prompts/`
 - `themes/`
 
+The wrapper also preloads the bundled extensions, skills, prompt templates, and themes, so `nix run .#` works without any extra Pi settings.
+
 ## Themes
 
 This package also ships Catppuccin themes for Pi under `themes/`:
