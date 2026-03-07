@@ -176,6 +176,7 @@
                 "private": true,
                 "keywords": ["pi-package"],
                 "pi": {
+                  "defaultTheme": "catppuccin-mocha",
                   "extensions": [
                     "./extensions/*/index.ts"
                   ],
@@ -207,6 +208,7 @@
                 --add-flags "--extension $out/extensions/owasp-fix/index.ts" \
                 --add-flags "--extension $out/extensions/refactor-safety/index.ts" \
                 --add-flags "--extension $out/extensions/test-audit/index.ts" \
+                --add-flags "--extension $out/extensions/pi-catppuccin/index.ts" \
                 --add-flags "--skill $out/skills" \
                 --add-flags "--prompt-template $out/prompts" \
                 --add-flags "--theme $out/themes"
