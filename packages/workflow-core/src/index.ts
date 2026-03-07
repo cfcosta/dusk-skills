@@ -6,6 +6,7 @@ export {
   parseTrimmedStringArg,
 } from "./message-content";
 export type { LastAssistantTextResult } from "./message-content";
+export type { ExtensionAPI, ExtensionContext, ExtensionUI } from "./extension-api";
 export { PromptLoadError, loadPromptFiles } from "./prompt-loader";
 export type { PromptLoadResult } from "./prompt-loader";
 export { PhaseWorkflow } from "./phase-workflow";

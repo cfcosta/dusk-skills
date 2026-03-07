@@ -1,5 +1,8 @@
-import type { ExtensionAPI } from "@anthropic-ai/claude-code";
-import { PhaseWorkflow, type PromptSnapshot } from "../../packages/workflow-core/src/index";
+import {
+  PhaseWorkflow,
+  type ExtensionAPI,
+  type PromptSnapshot,
+} from "../../packages/workflow-core/src/index";
 import { parseScopeArg } from "./messages";
 import { buildPrompt, type PromptBundle, type PromptLoadResult } from "./prompting";
 

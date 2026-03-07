@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI } from "@anthropic-ai/claude-code";
+import type { ExtensionAPI } from "../../packages/workflow-core/src/index";
 import { loadPrompts } from "./prompting";
 import { OwaspWorkflow } from "./workflow";
 

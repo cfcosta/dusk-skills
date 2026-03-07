@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@anthropic-ai/claude-code";
+import type { ExtensionAPI, ExtensionContext } from "./extension-api";
 import { extractLastUserText, getLastAssistantTextResult } from "./message-content";
 
 type WorkflowResultKind = "ok" | "blocked" | "recoverable_error";
