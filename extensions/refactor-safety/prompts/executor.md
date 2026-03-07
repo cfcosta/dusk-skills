@@ -9,25 +9,30 @@ Execute every approved refactor with a **strict tests-first workflow** and creat
 ## Mandatory process (for EACH approved refactor step)
 
 ### Step 1: Write regression tests FIRST
+
 - Implement the tests from the Arbiter's test delta plan for this step.
 - These tests must validate the behavioral invariants that this refactor touches.
 - Run the new tests and confirm they PASS against the CURRENT (pre-refactor) code (**GREEN baseline**).
 - If new tests fail against current code, the invariant understanding is wrong — STOP and report.
 
 ### Step 2: Execute the minimal refactor
+
 - Make the structural change described in the commit plan.
 - Change ONLY what the plan specifies. Do not expand scope.
 - Do not combine multiple refactor steps.
 
 ### Step 3: Verify all tests pass
+
 - Run ALL tests (not just the new ones) — must stay **GREEN**.
 - If any test fails, revert the refactor and report the failure. Do not push forward.
 
 ### Step 4: Run quality gates
+
 - Run required quality gates for the project (linters, type checks, etc.).
 - Fix any issues introduced by the refactor before committing.
 
 ### Step 5: Commit atomically
+
 - Commit only the files for this refactor step using `jj commit <changed paths> -m <message>`.
 - Follow `@prompts/jj-commit.md` exactly for every commit.
 - Use Conventional Commits format.

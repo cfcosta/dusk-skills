@@ -53,6 +53,9 @@
         );
     in
     {
+      homeManagerModules.default = import ./modules/home-manager.nix { inherit self; };
+      homeModules.default = self.homeManagerModules.default;
+
       devShells = forEachSupportedSystem (
         { pkgs, system }:
         {
@@ -175,10 +178,11 @@
             src = self;
 
             buildPhase = ''
-              mkdir -p $out/{prompts,skills,themes}
+              mkdir -p $out/{prompts,skills,themes,share/pi/themes}
 
               cp -rf ${./prompts}/* $out/prompts/
               cp -rf ${./themes}/* $out/themes/
+              cp -rf ${./themes}/* $out/share/pi/themes/
               cp -rf ${./skills}/rust-proptest $out/skills/rust-proptest
 
               mkdir -p $out/skills/humanizer

@@ -66,7 +66,9 @@ Whenever generating property tests, the LLM MUST output:
 Use this order of preference:
 
 ### 1️⃣ Differential Testing (Highest Leverage)
+
 Compare:
+
 - Optimized vs naive implementation
 - Your parser vs known correct parser
 - Your data structure vs `Vec`, `BTreeMap`, etc.
@@ -78,6 +80,7 @@ This catches real bugs quickly.
 ### 2️⃣ Model-Based Testing (Stateful APIs)
 
 If the API mutates state:
+
 - Generate sequences of operations
 - Execute both SUT and simple model
 - Compare state after each step
@@ -87,6 +90,7 @@ If the API mutates state:
 ### 3️⃣ Round-Trip Properties
 
 Examples:
+
 - `decode(encode(x)) == x`
 - `parse(print(x))` idempotence
 
@@ -95,6 +99,7 @@ Examples:
 ### 4️⃣ Metamorphic Testing
 
 When no oracle exists:
+
 - Define transformation `t(x)`
 - Assert relationship between `f(x)` and `f(t(x))`
 
@@ -103,6 +108,7 @@ When no oracle exists:
 ### 5️⃣ Algebraic Laws
 
 Use when mathematically meaningful:
+
 - Commutativity
 - Associativity
 - Idempotence
@@ -439,6 +445,7 @@ It is about:
 - Catching bugs that example tests miss
 
 Design properties like you design APIs:
+
 - Carefully
 - Explicitly
 - With invariants first

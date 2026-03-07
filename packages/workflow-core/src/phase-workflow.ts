@@ -61,11 +61,7 @@ export interface PhaseWorkflowOptions<Prompts> {
   isWriteCapableTool?: (toolName?: string) => boolean;
 }
 
-const DEFAULT_BLOCKED_TOOLS_IN_ANALYSIS = new Set([
-  "edit",
-  "write",
-  "multiedit",
-]);
+const DEFAULT_BLOCKED_TOOLS_IN_ANALYSIS = new Set(["edit", "write", "multiedit"]);
 
 export class PhaseWorkflow<Prompts> {
   private readonly maxEmptyOutputRetries: number;

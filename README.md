@@ -2,6 +2,30 @@
 
 My personal collection of skills.
 
+## Home Manager module
+
+This flake exports a Home Manager module at `homeModules.default` (also aliased as `homeManagerModules.default`). It mirrors the AI setup from my `home.nix` config:
+
+- installs `pi`, `claude-code`, `codex`, `gemini-cli`, `opencode`, `crush`, and `beads`
+- writes `~/.pi/agent/settings.json`
+- registers the bundled Pi packages from this repo
+- links the bundled skills into `~/.claude/skills` and `~/.codex/skills`
+- can activate one of the bundled Catppuccin Pi themes
+
+Example:
+
+```nix
+{
+  imports = [ inputs.dusk-skills.homeModules.default ];
+
+  programs.pi = {
+    enable = true;
+    catppuccin.enable = true;
+    # or: theme = "catppuccin-mocha";
+  };
+}
+```
+
 ## Themes
 
 This package also ships Catppuccin themes for Pi under `themes/`:
