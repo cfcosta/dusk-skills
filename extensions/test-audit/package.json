@@ -1,5 +1,5 @@
 {
-  "name": "jj-test-audit",
+  "name": "@duskpi/test-audit",
   "version": "0.1.0",
   "private": true,
   "type": "module"
