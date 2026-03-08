@@ -14,7 +14,7 @@ The default package bundles upstream Pi together with repo-owned resources:
   - `/bug-fix`
   - `/owasp-fix`
   - `/test-audit`
-  - `/refactor-safety`
+  - `/refactor`
 - **Planning extension**
   - `/plan`
   - `/todos`
@@ -119,7 +119,7 @@ Use it when you want Pi to:
 - produce a tighter, verified testing plan
 - then implement tests or fixes
 
-#### `/refactor-safety`
+#### `/refactor`
 
 Refactor workflow with explicit skepticism before execution.
 
@@ -178,7 +178,7 @@ That is why commands like these should be present right away:
 - `/bug-fix`
 - `/owasp-fix`
 - `/test-audit`
-- `/refactor-safety`
+- `/refactor`
 - `/plan`
 - `/todos`
 - `/innovate`
@@ -196,7 +196,7 @@ Notable entries:
 - `bug-fix`
 - `owasp-fix`
 - `test-audit`
-- `refactor-safety`
+- `refactor`
 - `pi-catppuccin`
 - `pi-plan` (vendored from `devkade/pi-plan` and built in Nix)
 

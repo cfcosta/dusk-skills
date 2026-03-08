@@ -226,7 +226,7 @@
               wrapProgram $out/bin/pi \
                 --add-flags "--extension $out/extensions/bug-fix/index.ts" \
                 --add-flags "--extension $out/extensions/owasp-fix/index.ts" \
-                --add-flags "--extension $out/extensions/refactor-safety/index.ts" \
+                --add-flags "--extension $out/extensions/refactor/index.ts" \
                 --add-flags "--extension $out/extensions/test-audit/index.ts" \
                 --add-flags "--extension $out/extensions/pi-catppuccin/index.ts" \
                 --add-flags "--extension $out/extensions/pi-plan/index.ts" \

@@ -1,11 +1,11 @@
-# refactor-safety extension
+# refactor extension
 
 ## Runtime modules
 
 - `index.ts`: extension bootstrap and API registration only.
-- `workflow.ts`: refactor-safety workflow definition built on generic `PhaseWorkflow` from `packages/workflow-core`.
-- `prompting.ts`: refactor-safety prompt contract and prompt rendering.
-- `messages.ts`: refactor-safety argument/message adapters over generic workflow-core message helpers.
+- `workflow.ts`: refactor workflow definition built on generic `PhaseWorkflow` from `packages/workflow-core`.
+- `prompting.ts`: refactor prompt contract and prompt rendering.
+- `messages.ts`: refactor argument/message adapters over generic workflow-core message helpers.
 - `packages/workflow-core/src/phase-workflow.ts`: reusable phase orchestration state machine.
 - `packages/workflow-core/src/prompt-loader.ts`: reusable prompt bundle loader.
 - `packages/workflow-core/src/message-content.ts`: reusable message parsing helpers.

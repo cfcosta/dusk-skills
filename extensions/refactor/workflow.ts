@@ -11,15 +11,15 @@ const EXECUTION_PHASE = "executor" as const;
 
 const PHASE_LABELS: Record<(typeof ANALYSIS_PHASES)[number] | typeof EXECUTION_PHASE, string> = {
   mapper: "Mapping refactor candidates...",
-  skeptic: "Reviewing refactor safety...",
+  skeptic: "Reviewing refactors...",
   arbiter: "Arbitrating refactor plan...",
   executor: "Executing refactors...",
 };
 
-export class RefactorSafetyWorkflow extends PhaseWorkflow<PromptBundle> {
+export class RefactorWorkflow extends PhaseWorkflow<PromptBundle> {
   constructor(api: ExtensionAPI, promptProvider: () => PromptLoadResult) {
     super(api, {
-      id: "refactor-safety",
+      id: "refactor",
       analysisPhases: ANALYSIS_PHASES,
       executionPhase: EXECUTION_PHASE,
       phaseLabels: PHASE_LABELS,
@@ -39,23 +39,23 @@ export class RefactorSafetyWorkflow extends PhaseWorkflow<PromptBundle> {
         }),
       text: {
         unavailable: (error) =>
-          `Refactor safety is unavailable: ${error?.message ?? "prompt initialization failed."}`,
+          `Refactor is unavailable: ${error?.message ?? "prompt initialization failed."}`,
         alreadyRunning:
-          "Refactor safety is already running. Finish or cancel the current run first.",
-        analysisWriteBlocked: "Refactor safety analysis phase: writes are disabled",
-        complete: "Refactor safety workflow complete!",
-        cancelled: "Refactor safety cancelled.",
-        selectTitle: "Refactor Safety - Analysis Complete",
+          "Refactor is already running. Finish or cancel the current run first.",
+        analysisWriteBlocked: "Refactor analysis phase: writes are disabled",
+        complete: "Refactor workflow complete!",
+        cancelled: "Refactor cancelled.",
+        selectTitle: "Refactor - Analysis Complete",
         executeOption: "Execute refactors (TDD workflow)",
         refineOption: "Refine the analysis",
         cancelOption: "Cancel",
         refineEditorLabel: "Refine analysis:",
         sendFailed: (phase) =>
-          `Refactor safety stopped: failed to send prompt for phase '${phase}'.`,
+          `Refactor stopped: failed to send prompt for phase '${phase}'.`,
         missingOutputRetry: (phase, retry, maxRetries) =>
           `No assistant output captured for phase '${phase}'. Retrying (${retry}/${maxRetries}).`,
         missingOutputStopped: (attempts) =>
-          `Refactor safety stopped: no assistant output captured after ${attempts} attempts.`,
+          `Refactor stopped: no assistant output captured after ${attempts} attempts.`,
       },
       maxEmptyOutputRetries: 2,
       maxRefinementAttempts: 3,

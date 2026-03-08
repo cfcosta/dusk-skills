@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import refactorSafety from "./index";
-import { RefactorSafetyWorkflow } from "./workflow";
+import refactor from "./index";
+import { RefactorWorkflow } from "./workflow";
 import { extractAssistantText, parseScopeArg } from "./messages";
 import { buildPrompt, loadPrompts } from "./prompting";
 
@@ -60,7 +60,7 @@ function createHarness(options?: {
     executor: "EXECUTOR",
   };
 
-  const workflow = new RefactorSafetyWorkflow(api as never, () => ({ ok: true, prompts }));
+  const workflow = new RefactorWorkflow(api as never, () => ({ ok: true, prompts }));
 
   return { workflow, ctx: ctx as never, sentMessages, notifications, statuses, widgets };
 }
@@ -263,7 +263,7 @@ test("workflow limits refinement attempts", async () => {
   }
 
   assert.equal(notifications.at(-1)?.level, "info");
-  assert.match(notifications.at(-1)?.message ?? "", /refactor safety cancelled/i);
+  assert.match(notifications.at(-1)?.message ?? "", /refactor cancelled/i);
 });
 
 test("analysis phases block write-capable tool variants", async () => {
@@ -283,7 +283,7 @@ test("analysis phases block write-capable tool variants", async () => {
 });
 
 test("loadPrompts loads prompt bundle from a valid directory", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-safety-prompts-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-prompts-"));
   fs.writeFileSync(path.join(tempDir, "mapper.md"), "mapper");
   fs.writeFileSync(path.join(tempDir, "skeptic.md"), "skeptic");
   fs.writeFileSync(path.join(tempDir, "arbiter.md"), "arbiter");
@@ -298,7 +298,7 @@ test("loadPrompts loads prompt bundle from a valid directory", () => {
 });
 
 test("loadPrompts returns structured error when files are missing", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-safety-prompts-missing-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-prompts-missing-"));
   fs.writeFileSync(path.join(tempDir, "mapper.md"), "mapper");
 
   const result = loadPrompts(tempDir);
@@ -378,7 +378,7 @@ test("workflow reports invalid assistant payload instead of retrying as empty ou
   assert.match(notifications.at(-1)?.message ?? "", /invalid assistant payload/i);
 });
 
-test("refactorSafety command wiring uses real prompt files end-to-end", async () => {
+test("refactor command wiring uses real prompt files end-to-end", async () => {
   const commands: Record<string, { handler: (args: unknown, ctx: unknown) => Promise<unknown> }> =
     {};
   const listeners: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
@@ -413,9 +413,9 @@ test("refactorSafety command wiring uses real prompt files end-to-end", async ()
     },
   };
 
-  refactorSafety(api as never);
+  refactor(api as never);
 
-  await commands["refactor-safety"]?.handler("", ctx as never);
+  await commands["refactor"]?.handler("", ctx as never);
   assert.match(sentMessages[0] ?? "", /You are a refactor mapping agent/);
 
   await listeners.agent_end?.(
@@ -425,7 +425,7 @@ test("refactorSafety command wiring uses real prompt files end-to-end", async ()
   assert.match(sentMessages[1] ?? "", /You are an adversarial refactor reviewer/);
 });
 
-test("refactorSafety registers command and event handlers", () => {
+test("refactor registers command and event handlers", () => {
   const commands: Record<string, { handler: (args: unknown, ctx: unknown) => Promise<unknown> }> =
     {};
   const listeners: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
@@ -443,9 +443,9 @@ test("refactorSafety registers command and event handlers", () => {
     sendUserMessage() {},
   };
 
-  refactorSafety(api as never);
+  refactor(api as never);
 
-  assert.ok(commands["refactor-safety"]);
+  assert.ok(commands["refactor"]);
   assert.ok(listeners.tool_call);
   assert.ok(listeners.agent_end);
 });
