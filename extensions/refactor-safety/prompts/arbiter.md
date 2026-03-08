@@ -79,6 +79,8 @@ When judging a plan:
 - prefer names based on enduring responsibility, contract, or domain role
 - reject names that merely mirror the user's request phrasing (`new backend`, `old path`, `extra fallback`, `doXForY`)
 - reject abstractions whose names describe implementation context rather than meaning
+- reject plans that materially change an existing symbol's responsibility while preserving a misleading old name
+- require rename steps when touched existing names would become inaccurate after the approved refactor
 - only allow contextual qualifiers when they are a real domain distinction visible to readers outside this refactor
 
 ## Final summary

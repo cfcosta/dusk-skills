@@ -342,11 +342,23 @@ test("real prompt bundle enforces responsibility-first naming guidance", () => {
     return;
   }
 
-  assert.match(loaded.prompts.executor, /name new code by enduring responsibility/i);
-  assert.match(loaded.prompts.executor, /avoid names that encode the change request/i);
+  assert.match(
+    loaded.prompts.executor,
+    /name new and existing touched code by enduring responsibility/i,
+  );
+  assert.match(
+    loaded.prompts.executor,
+    /apply this rule to every symbol introduced, extracted, repurposed, or materially modified/i,
+  );
   assert.match(loaded.prompts.executor, /do_foo_with_bar|doXForY|newBackendX|oldPath/i);
   assert.match(loaded.prompts.skeptic, /context-bound naming/i);
+  assert.match(loaded.prompts.skeptic, /semantic drift/i);
   assert.match(loaded.prompts.arbiter, /semantic naming quality/i);
+  assert.match(
+    loaded.prompts.arbiter,
+    /materially change an existing symbol's responsibility while preserving a misleading old name/i,
+  );
+  assert.match(loaded.prompts.mapper, /existing names that have become inaccurate/i);
 });
 
 test("workflow reports invalid assistant payload instead of retrying as empty output", async () => {

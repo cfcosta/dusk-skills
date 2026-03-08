@@ -36,6 +36,10 @@ When reviewing a candidate or execution plan, explicitly challenge names that:
 - describe wiring mechanics instead of semantic role
 - encode temporary rollout states as if they were stable concepts
 - use generic verbs (`do`, `handle`, `process`) where the code's actual responsibility can be named precisely
+- remain unchanged even though the refactor materially changes the symbol's responsibility or boundary
+- preserve migration-era or patch-era naming on existing code that is already being touched within scope
+
+Also challenge plans that create semantic drift: the code's role changes, but the old name survives and becomes misleading.
 
 ## Output format
 
