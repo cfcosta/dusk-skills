@@ -61,7 +61,8 @@ export interface PhaseWorkflowOptions<Prompts> {
   isWriteCapableTool?: (toolName?: string) => boolean;
 }
 
-const DEFAULT_BLOCKED_TOOLS_IN_ANALYSIS = new Set(["edit", "write", "multiedit"]);
+const DEFAULT_MUTATING_TOOL_NAMES = new Set(["edit", "write", "multiedit"]);
+const DEFAULT_MUTATION_NAME_FRAGMENTS = ["edit", "write"];
 
 export class PhaseWorkflow<Prompts> {
   private readonly maxEmptyOutputRetries: number;
@@ -379,13 +380,19 @@ export class PhaseWorkflow<Prompts> {
       return this.options.isWriteCapableTool(toolName);
     }
 
-    const normalized = (toolName ?? "").trim().toLowerCase();
-    if (DEFAULT_BLOCKED_TOOLS_IN_ANALYSIS.has(normalized)) {
-      return true;
-    }
-
-    return normalized.includes("edit") || normalized.includes("write");
+    return isDefaultMutatingToolName(toolName);
   }
+}
+
+function isDefaultMutatingToolName(toolName?: string): boolean {
+  const normalizedToolName = (toolName ?? "").trim().toLowerCase();
+  if (DEFAULT_MUTATING_TOOL_NAMES.has(normalizedToolName)) {
+    return true;
+  }
+
+  return DEFAULT_MUTATION_NAME_FRAGMENTS.some((fragment) => {
+    return normalizedToolName.includes(fragment);
+  });
 }
 
 function normalizeMessage(value: string): string {
