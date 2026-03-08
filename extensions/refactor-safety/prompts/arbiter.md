@@ -68,6 +68,18 @@ Reject candidates where:
 - Test coverage is insufficient AND the test delta would be disproportionately large
 - The behavioral risk outweighs the structural benefit
 - The blast radius is larger than the mapper assessed and cannot be safely contained
+- The plan introduces patch-specific, rollout-specific, or semantically weak names instead of stable domain names
+
+## Naming quality bar
+
+Approved steps must preserve or improve semantic naming quality.
+
+When judging a plan:
+
+- prefer names based on enduring responsibility, contract, or domain role
+- reject names that merely mirror the user's request phrasing (`new backend`, `old path`, `extra fallback`, `doXForY`)
+- reject abstractions whose names describe implementation context rather than meaning
+- only allow contextual qualifiers when they are a real domain distinction visible to readers outside this refactor
 
 ## Final summary
 

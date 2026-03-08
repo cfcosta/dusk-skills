@@ -333,6 +333,22 @@ test("buildPrompt includes refinement contract for arbiter mode", () => {
   assert.match(prompt, /tighten blast radius/);
 });
 
+test("real prompt bundle enforces responsibility-first naming guidance", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(loaded.prompts.executor, /name new code by enduring responsibility/i);
+  assert.match(loaded.prompts.executor, /avoid names that encode the change request/i);
+  assert.match(loaded.prompts.executor, /do_foo_with_bar|doXForY|newBackendX|oldPath/i);
+  assert.match(loaded.prompts.skeptic, /context-bound naming/i);
+  assert.match(loaded.prompts.arbiter, /semantic naming quality/i);
+});
+
 test("workflow reports invalid assistant payload instead of retrying as empty output", async () => {
   const { workflow, ctx, sentMessages, notifications } = createHarness();
 
