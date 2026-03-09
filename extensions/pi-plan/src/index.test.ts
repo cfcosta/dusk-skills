@@ -159,6 +159,11 @@ function buildPlanText(): string {
   ].join("\n");
 }
 
+function extractRequestId(prompt: string): string | undefined {
+  const match = prompt.match(/<!--\s*workflow-request-id:([^>]+)\s*-->/i);
+  return match?.[1]?.trim();
+}
+
 test("parseCritiqueVerdict accepts markdown-formatted PASS verdicts", () => {
   expect(parseCritiqueVerdict(`1) **Verdict:** PASS\n2) Issues:\n- none`)).toBe("PASS");
 });
@@ -231,13 +236,78 @@ test("plan extension registers the guided workflow listener surface plus todos",
   ]);
 });
 
-test("one-shot /plan task enables plan mode and immediately sends the task", async () => {
+test("one-shot /plan task enables plan mode and starts a correlated planning request", async () => {
   const harness = createPlanExtensionHarness();
 
   await harness.runCommand("plan", "Investigate flaky prompt extraction");
 
   expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
-  expect(harness.sentUserMessages).toEqual(["Investigate flaky prompt extraction"]);
+  expect(harness.sentUserMessages).toHaveLength(1);
+  expect(harness.sentUserMessages[0]).toContain("Investigate flaky prompt extraction");
+  expect(extractRequestId(harness.sentUserMessages[0] ?? "")).toBeTruthy();
+});
+
+test("correlated /plan requests ignore unmatched agent_end payloads", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "Investigate flaky prompt extraction");
+
+  const requestPrompt = harness.sentUserMessages[0] ?? "";
+  const requestId = extractRequestId(requestPrompt);
+  expect(requestId).toBeTruthy();
+
+  const agentEndHandler = harness.eventHandlers.get("agent_end")?.[0];
+  expect(agentEndHandler).toBeTruthy();
+
+  const result = await agentEndHandler?.(
+    {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: requestPrompt.replace(requestId ?? "", "pi-plan-999"),
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: buildPlanText() }],
+        },
+      ],
+    },
+    harness.ctx,
+  );
+
+  expect(result).toEqual({ kind: "blocked", reason: "unmatched_agent_end" });
+  expect(harness.sentMessages).toHaveLength(0);
+  expect(harness.uiStub.customCalls).toHaveLength(0);
+});
+
+test("correlated /plan requests still route matched responses into critique", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "Investigate flaky prompt extraction");
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: harness.sentUserMessages[0] }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  expect(harness.sentMessages).toHaveLength(1);
+  expect(harness.sentMessages[0]).toMatchObject({
+    customType: "pi-plan-internal",
+    display: false,
+  });
 });
 
 test("plan extension harness registers commands and handles agent_end in read-only mode", async () => {
@@ -448,9 +518,11 @@ test("regenerate selection clears tracked todos before sending a refresh prompt"
     ],
   });
 
-  expect(harness.sentUserMessages).toEqual([
+  expect(harness.sentUserMessages).toHaveLength(1);
+  expect(harness.sentUserMessages[0]).toContain(
     "Regenerate the full plan from scratch. Re-check context and provide a refreshed Plan: section.",
-  ]);
+  );
+  expect(extractRequestId(harness.sentUserMessages[0] ?? "")).toBeTruthy();
 
   await harness.runCommand("todos");
 

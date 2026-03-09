@@ -211,8 +211,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       this.enterPlanMode(ctx);
     }
 
-    this.pi.sendUserMessage(raw);
-    return { kind: "ok" };
+    return this.startPlanningRequest(raw, ctx);
   }
 
   async handleToolCall(
@@ -297,6 +296,16 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return { kind: "ok" };
     }
 
+    const hasPendingPlanningRequest = this.hasPendingPlanningRequest();
+    if (hasPendingPlanningRequest) {
+      const result = await super.handleAgentEnd(event, ctx);
+      if (result.kind !== "ok") {
+        return result;
+      }
+
+      await this.resetPlanningRequestState(ctx);
+    }
+
     if (!this.planModeEnabled || !ctx.hasUI || !lastAssistantText) {
       return { kind: "ok" };
     }
@@ -363,10 +372,10 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       this.resetExecutionState();
       this.resetPlanningDraft();
       this.setStatus(ctx);
-      this.pi.sendUserMessage(
+      return this.startPlanningRequest(
         "Regenerate the full plan from scratch. Re-check context and provide a refreshed Plan: section.",
+        ctx,
       );
-      return { kind: "ok" };
     }
 
     if (selection.action === "continue") {
@@ -384,15 +393,16 @@ export class PiPlanWorkflow extends GuidedWorkflow {
 
       const firstOpenStep = this.todoItems.find((item) => !item.completed);
       if (firstOpenStep) {
-        this.pi.sendUserMessage(
+        return this.startPlanningRequest(
           `Continue planning from the proposed plan. User note: ${continueNote}. Focus on step ${firstOpenStep.step}: ${firstOpenStep.text}. Refine files, validation, and risks in read-only mode.`,
-        );
-      } else {
-        this.pi.sendUserMessage(
-          `Continue planning from the proposed plan. User note: ${continueNote}. Refine implementation details without regenerating the full plan.`,
+          ctx,
         );
       }
-      return { kind: "ok" };
+
+      return this.startPlanningRequest(
+        `Continue planning from the proposed plan. User note: ${continueNote}. Refine implementation details without regenerating the full plan.`,
+        ctx,
+      );
     }
 
     if (selection.action === "exit") {
@@ -409,11 +419,28 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   }
 
   async handleSessionShutdown(_event: SessionShutdownEvent, ctx: ExtensionContext): Promise<void> {
+    await super.handleSessionShutdown(_event, ctx);
     this.resetExecutionState();
     if (ctx.hasUI) {
       ctx.ui.setStatus(STATUS_KEY, undefined);
       ctx.ui.setWidget(TODO_WIDGET_KEY, undefined);
     }
+  }
+
+  private hasPendingPlanningRequest(): boolean {
+    const state = this.getStateSnapshot();
+    return state.phase !== "idle" && state.awaitingResponse;
+  }
+
+  private async startPlanningRequest(
+    prompt: string,
+    ctx: ExtensionContext,
+  ): Promise<GuidedWorkflowResult> {
+    return super.handleCommand(prompt, ctx);
+  }
+
+  private async resetPlanningRequestState(ctx: ExtensionContext): Promise<void> {
+    await super.handleSessionShutdown({ reason: "pi-plan-consumed-planning-response" }, ctx);
   }
 
   private getAllToolNames(): string[] {
