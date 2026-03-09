@@ -333,7 +333,7 @@ test("buildPrompt includes refinement contract for arbiter mode", () => {
   assert.match(prompt, /tighten blast radius/);
 });
 
-test("real prompt bundle includes the refactoring action catalog", () => {
+test("real prompt bundle includes a complete canonical refactoring catalog", () => {
   const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
   const loaded = loadPrompts(promptDirectory);
 
@@ -342,13 +342,44 @@ test("real prompt bundle includes the refactoring action catalog", () => {
     return;
   }
 
-  assert.match(loaded.prompts.mapper, /Extract Method\/Function/i);
-  assert.match(loaded.prompts.mapper, /Inline Method\/Function/i);
-  assert.match(loaded.prompts.mapper, /Replace Conditional with Polymorphism/i);
-  assert.match(loaded.prompts.mapper, /Remove Dead Code/i);
+  assert.match(loaded.prompts.mapper, /Extract Function/i);
+  assert.match(loaded.prompts.mapper, /Inline Function/i);
+  assert.match(loaded.prompts.mapper, /Rename Variable/i);
+  assert.match(loaded.prompts.mapper, /Move Function\s*\/\s*Method/i);
+  assert.match(loaded.prompts.mapper, /Change Function Declaration/i);
+  assert.match(loaded.prompts.mapper, /Introduce Parameter Object/i);
+  assert.match(loaded.prompts.mapper, /Decompose Conditional/i);
+  assert.match(loaded.prompts.mapper, /Pattern-directed and composite refactorings/i);
+  assert.match(loaded.prompts.mapper, /Legacy-safe change-enabling transformations/i);
+  assert.match(loaded.prompts.mapper, /Cross-boundary refactorings/i);
   assert.match(loaded.prompts.arbiter, /Approved refactoring action catalog/i);
+  assert.match(loaded.prompts.arbiter, /Canonical replacements for coarse wording/i);
   assert.match(loaded.prompts.executor, /Refactoring action discipline/i);
-  assert.match(loaded.prompts.executor, /Simplify Conditional/i);
+  assert.match(loaded.prompts.executor, /Change Function Declaration/i);
+  assert.match(loaded.prompts.executor, /Decompose Conditional/i);
+  assert.match(loaded.prompts.executor, /Cross-boundary refactorings/i);
+});
+
+test("real prompt bundle requires precise refactoring labels and tier separation", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(
+    loaded.prompts.mapper,
+    /collapse materially different refactors into umbrella labels/i,
+  );
+  assert.match(loaded.prompts.skeptic, /catalog blur/i);
+  assert.match(loaded.prompts.skeptic, /tier confusion/i);
+  assert.match(
+    loaded.prompts.arbiter,
+    /hides materially different work behind umbrella labels such as/i,
+  );
+  assert.match(loaded.prompts.executor, /prefer precise labels such as/i);
 });
 
 test("real prompt bundle enforces responsibility-first naming guidance", () => {

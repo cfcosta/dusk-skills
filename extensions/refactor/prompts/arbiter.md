@@ -56,6 +56,7 @@ An ordered sequence of refactor steps. Each step:
 - References which invariants it touches
 - Lists the tests to add or update as part of that step
 - Can be reverted without affecting other steps
+- Names the **canonical refactoring action(s)** for the step using the catalog below
 
 ### 5. Verdicts
 
@@ -76,21 +77,190 @@ Reject candidates where:
 - The blast radius is larger than the mapper assessed and cannot be safely contained
 - The invariants cannot be made explicit enough to validate with a reasonably targeted test delta
 - The plan introduces patch-specific, rollout-specific, or semantically weak names instead of stable domain names
+- The proposal hides materially different work behind umbrella labels such as **Rename**, **Move**, or **Simplify Conditional** instead of identifying the specific action that must happen
+
+## Catalog judgment rules
+
+Use Fowler-style names as the canonical labels for approved refactor steps.
+
+- Keep one **core code-level catalog** for ordinary code refactorings.
+- Treat **pattern-directed/composite**, **legacy-safe enabling moves**, and **cross-boundary refactorings** as separate appendices or tiers.
+- Require **specific action names** whenever the evidence supports them.
+- Do not approve a step under a coarse label if the real work is more precisely something like **Rename Variable**, **Move Function / Method**, **Change Function Declaration**, or **Decompose Conditional**.
+- When a candidate is composite, approve it only if it can be decomposed into safe intermediate commits.
 
 ## Approved refactoring action catalog
 
-Prefer approved steps that use one or more of these safe refactoring actions when they match the underlying smell:
+Prefer approved steps that use one or more of these safe refactoring actions when they match the underlying smell.
 
-- **Extract Method/Function** — extract cohesive logic into a well-named helper whose name explains why the logic exists.
-- **Inline Method/Function** — remove indirection when the call site is clearer without the helper.
-- **Rename** — rename misleading symbols to match domain language and current responsibility.
-- **Move** — move code to the module or file that owns the responsibility.
-- **Introduce Explaining Variable** — name complex expressions so intent becomes obvious.
-- **Replace Conditional with Polymorphism** — only approve when behavior selection is type-driven and the plan can be broken into safe intermediate commits.
-- **Remove Dead Code** — delete unreachable or unused code rather than preserving it behind comments.
-- **Simplify Conditional** — replace tangled boolean logic with named predicates or consolidated branches.
+### 1. Naming and intent
 
-Use these labels in verdicts and in the atomic commit plan whenever they describe the actual change. Do not force the plan into these categories if the real problem is broader, but do require the mapper/executor to name the action clearly.
+- **Rename Variable**
+- **Rename Field**
+- **Rename Function/Method**
+- **Rename Class / Type**
+- **Rename Package / Module**
+- **Replace Magic Literal with Symbolic Constant**
+- **Introduce Assertion**
+
+### 2. Extraction, inlining, and decomposition
+
+- **Extract Function** (_Extract Method_)
+- **Inline Function** (_Inline Method_)
+- **Extract Variable** (_Introduce Explaining Variable_)
+- **Inline Variable**
+- **Replace Inline Code with Function Call**
+- **Move Statements into Function**
+- **Move Statements to Callers**
+- **Slide Statements**
+- **Split Loop**
+- **Split Phase**
+- **Substitute Algorithm**
+
+### 3. Data and state
+
+- **Encapsulate Variable / Field**
+- **Encapsulate Collection**
+- **Encapsulate Record / Replace Record with Data Class**
+- **Change Value to Reference**
+- **Change Reference to Value**
+- **Replace Primitive with Object**
+- **Introduce Parameter Object**
+- **Preserve Whole Object**
+- **Remove Setting Method**
+- **Replace Derived Variable with Query**
+- **Replace Temp with Query**
+- **Return Modified Value**
+
+### 4. Signatures, callers, and construction
+
+- **Change Function Declaration** (_Change Signature / Add Parameter / Remove Parameter / Rename Function_)
+- **Parameterize Function / Method**
+- **Remove Flag Argument** (_Replace Parameter with Explicit Methods_)
+- **Replace Parameter with Query**
+- **Replace Query with Parameter**
+- **Separate Query from Modifier**
+- **Replace Constructor with Factory Function / Method**
+- **Pull Up Constructor Body**
+- **Replace Function with Command** (_Replace Method with Method Object_)
+- **Replace Command with Function**
+
+### 5. Movement and modularity
+
+- **Move Function / Method**
+- **Move Field**
+- **Move Class / Type**
+- **Change Package / Module**
+- **Extract and Move Method**
+- **Extract Class**
+- **Inline Class**
+- **Combine Functions into Class**
+- **Combine Functions into Transform**
+- **Hide Delegate**
+- **Remove Middle Man**
+
+### 6. Types, classes, and hierarchies
+
+- **Extract Superclass**
+- **Extract Interface**
+- **Extract Subclass**
+- **Collapse Hierarchy**
+- **Pull Up Method / Field**
+- **Push Down Method / Field**
+- **Remove Subclass** (_Replace Subclass with Fields_)
+- **Replace Subclass with Delegate**
+- **Replace Superclass with Delegate** (_Replace Inheritance with Delegation_)
+- **Replace Type Code with Subclasses**
+- **Replace Type Code with State / Strategy**
+- **Replace Conditional with Polymorphism**
+
+### 7. Conditionals, loops, and control flow
+
+- **Decompose Conditional**
+- **Consolidate Conditional Expression**
+- **Replace Nested Conditional with Guard Clauses**
+- **Introduce Special Case** (_Introduce Null Object_)
+- **Replace Control Flag with Break / Return**
+- **Replace Loop with Pipeline**
+- **Decompose Conditionals by Named Predicates**
+
+### 8. Errors and contracts
+
+- **Replace Error Code with Exception**
+- **Replace Exception with Precheck / Test**
+- **Remove Dead Code**
+
+### 9. Fine-grained low-level additions
+
+Use these when the candidate is best described at local-variable, parameter, field, return-type, or package granularity:
+
+- **Merge Variable / Parameter / Field**
+- **Split Variable / Parameter / Field**
+- **Parameterize Variable**
+- **Change Variable / Parameter / Return / Field Type**
+- **Move and Rename Method / Field**
+- **Move and Inline Method**
+- **Replace Variable / Field with Field**
+
+### 10. Pattern-directed and composite refactorings
+
+Approve these only when the plan can be broken into safe smaller commits:
+
+- **Replace Conditional Logic with Strategy**
+- **Replace State-Altering Conditionals with State**
+- **Replace Conditional Dispatcher with Command**
+- **Form Template Method**
+- **Move Creation Knowledge to Factory**
+- **Replace Constructors with Creation Methods**
+- **Introduce Polymorphic Creation with Factory Method**
+- **Move Embellishment to Decorator**
+- **Replace Implicit Tree with Composite**
+- **Replace One/Many Distinctions with Composite**
+- **Extract Composite**
+- **Replace Hard-Coded Notifications with Observer**
+- **Extract Adapter**
+- **Unify Interfaces with Adapter**
+- **Introduce Null Object**
+- **Move Accumulation to Collecting Parameter**
+- **Move Accumulation to Visitor**
+- **Method Decomposition**
+- **Method Composition**
+- **Class Decomposition**
+- **Composite Pull Up Method / Field**
+- **Composite Push Down Method / Field**
+- **Composite Inline Method**
+
+### 11. Legacy-safe change-enabling moves
+
+These belong in a separate appendix or tier, especially for fragile code:
+
+- **Sprout Method**
+- **Sprout Class**
+- **Wrap Method**
+- **Wrap Class**
+- **Extract Interface for Testability**
+- **Parameterize Constructor / Dependency Injection**
+
+### 12. Cross-boundary refactorings
+
+When the evidence points beyond local code structure, label the candidate explicitly and judge it with compatibility and migration risk in mind:
+
+- **Database refactorings**
+- **API refactorings**
+- **Architecture refactorings**
+
+Use these labels in verdicts and in the atomic commit plan whenever they describe the actual change. Do not force the plan into the wrong category just to keep it local-sounding.
+
+## Canonical replacements for coarse wording
+
+Normalize vague mapper or skeptic labels into the more precise action names below:
+
+- **Extract Method/Function** → **Extract Function** (_Extract Method_ as alias)
+- **Inline Method/Function** → **Inline Function** (_Inline Method_ as alias)
+- **Rename** → split into **Rename Variable**, **Rename Field**, **Rename Function/Method**, **Rename Class / Type**, **Rename Package / Module**
+- **Move** → split into **Move Function / Method**, **Move Field**, **Move Class / Type**, **Change Package / Module**, **Move Statements into Function**, **Move Statements to Callers**
+- **Introduce Explaining Variable** → **Extract Variable**
+- **Simplify Conditional** → split into **Decompose Conditional**, **Consolidate Conditional Expression**, **Replace Nested Conditional with Guard Clauses**, **Introduce Special Case**, **Replace Control Flag with Break / Return**, or **Replace Conditional with Polymorphism** when the branching is type-driven
 
 ## Naming quality bar
 
