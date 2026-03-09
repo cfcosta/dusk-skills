@@ -6,6 +6,8 @@ import * as path from "node:path";
 import {
   PhaseWorkflow,
   PromptLoadError,
+  extractLastAssistantText,
+  extractLastUserText,
   getLastAssistantTextResult,
   loadPromptFiles,
   parseTrimmedStringArg,
@@ -14,10 +16,56 @@ import {
   type PromptSnapshot,
 } from "./index";
 
-test("parseTrimmedStringArg trims strings and ignores non-strings", () => {
+test("parseTrimmedStringArg trims non-empty strings", () => {
   assert.equal(parseTrimmedStringArg("  src  "), "src");
+});
+
+test("parseTrimmedStringArg ignores blank and non-string args", () => {
   assert.equal(parseTrimmedStringArg("   "), undefined);
   assert.equal(parseTrimmedStringArg(undefined), undefined);
+  assert.equal(parseTrimmedStringArg({}), undefined);
+});
+
+test("extractLastAssistantText joins text blocks from the last assistant message", () => {
+  const result = extractLastAssistantText([
+    { role: "assistant", content: [{ type: "text", text: "first" }] },
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "second" },
+        { type: "text", text: "third" },
+      ],
+    },
+  ]);
+
+  assert.equal(result, "second\nthird");
+});
+
+test("extractLastAssistantText returns undefined when the last assistant message has no text blocks", () => {
+  const result = extractLastAssistantText([
+    { role: "assistant", content: [{ type: "tool_result", text: "ignored" }] },
+  ]);
+
+  assert.equal(result, undefined);
+});
+
+test("extractLastAssistantText ignores stale assistant output when the last message is from the user", () => {
+  const result = extractLastAssistantText([
+    { role: "assistant", content: [{ type: "text", text: "stale" }] },
+    { role: "user", content: [{ type: "text", text: "new prompt" }] },
+  ]);
+
+  assert.equal(result, undefined);
+});
+
+test("extractLastUserText returns the most recent user text message", () => {
+  const result = extractLastUserText([
+    { role: "user", content: [{ type: "text", text: "first request" }] },
+    { role: "assistant", content: [{ type: "text", text: "response" }] },
+    { role: "user", content: [{ type: "text", text: "latest request" }] },
+  ]);
+
+  assert.equal(result, "latest request");
 });
 
 test("getLastAssistantTextResult distinguishes ok/empty/invalid payloads", () => {
