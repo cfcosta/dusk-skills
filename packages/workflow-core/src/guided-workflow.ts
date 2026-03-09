@@ -145,6 +145,10 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     };
   }
 
+  protected getLatestPlanText(): string | undefined {
+    return this.latestPlanText;
+  }
+
   async handleCommand(args: unknown, ctx: ExtensionContext): Promise<GuidedWorkflowResult> {
     if (this.state.phase !== "idle") {
       ctx.ui.notify(this.options.text.alreadyRunning, "warning");

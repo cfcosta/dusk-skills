@@ -204,14 +204,15 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   }
 
   async handleTodosCommand(_args: unknown, ctx: ExtensionContext): Promise<void> {
-    if (this.todoItems.length === 0) {
+    const todoItems = this.getTodosItemsFromGuidedState();
+    if (todoItems.length === 0) {
       notify(this.pi, ctx, "No tracked plan steps. Create a plan in /plan mode first.", "info");
       return;
     }
 
-    const completed = this.todoItems.filter((item) => item.completed).length;
-    const progress = `${completed}/${this.todoItems.length}`;
-    const list = this.todoItems
+    const completed = todoItems.filter((item) => item.completed).length;
+    const progress = `${completed}/${todoItems.length}`;
+    const list = todoItems
       .map((item) => `${item.step}. ${item.completed ? "✓" : "○"} ${item.text}`)
       .join("\n");
     notify(this.pi, ctx, `Plan progress ${progress}\n${list}`, "info");
@@ -583,6 +584,20 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     }
 
     return undefined;
+  }
+
+  private getTodosItemsFromGuidedState(): TodoItem[] {
+    const execution = this.getExecutionSnapshot();
+    if (execution.items.length > 0) {
+      return execution.items.map((item) => ({
+        step: item.step,
+        text: item.text,
+        completed: item.completed,
+      }));
+    }
+
+    const latestPlanText = this.getLatestPlanText();
+    return latestPlanText ? extractTodoItems(latestPlanText) : [];
   }
 
   private getAllToolNames(): string[] {

@@ -671,7 +671,7 @@ test("execution DONE markers advance to the next guided step", async () => {
   });
 });
 
-test("final guided execution completion stops prompting and marks tracked progress done", async () => {
+test("final guided execution completion stops prompting and clears /todos state", async () => {
   const harness = createPlanExtensionHarness({
     hasUI: true,
     customSelection: { cancelled: false, action: "approve" },
@@ -712,8 +712,7 @@ test("final guided execution completion stops prompting and marks tracked progre
 
   await harness.runCommand("todos");
   expect(harness.uiStub.notifications).toContainEqual({
-    message:
-      "Plan progress 2/2\n1. ✓ A regression test for prompt leakage\n2. ✓ Approval action UI to show a compact summary",
+    message: "No tracked plan steps. Create a plan in /plan mode first.",
     level: "info",
   });
 });
