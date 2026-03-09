@@ -32,6 +32,13 @@ export type {
 } from "./extension-api";
 export { PromptLoadError, loadPromptFiles } from "./prompt-loader";
 export type { PromptLoadResult } from "./prompt-loader";
+export { GuidedWorkflow } from "./guided-workflow";
+export type {
+  GuidedWorkflowOptions,
+  GuidedWorkflowPhase,
+  GuidedWorkflowResult,
+  GuidedWorkflowState,
+} from "./guided-workflow";
 export { PhaseWorkflow } from "./phase-workflow";
 export type {
   PhaseWorkflowOptions,
