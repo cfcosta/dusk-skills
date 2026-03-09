@@ -77,10 +77,13 @@ This enables plan mode (if needed) and immediately sends the task.
 
 ### 3) Approve or continue planning
 
-After a plan is generated, Pi first runs an internal hidden critique pass. The critique/revision prompts stay out of the visible chat, while plan-status notifications still appear normally. Once the plan passes critique, you’ll get:
+After a plan is generated, Pi first runs an internal hidden critique pass. The critique/revision prompts stay out of the visible chat, while plan-status notifications still appear normally. Once the plan passes critique, you’ll get a richer approval menu with:
 
-- **Approve and execute now**
-- **Continue from proposed plan** _(inline note optional; press `Tab` to add/edit. If omitted, Pi asks for modification input and waits.)_
+- a compact review summary (step count + first extracted steps)
+- critique summary / quality badges when available
+- direct hotkeys (`A/C/R/X`, plus `E` to edit a note)
+- **Approve and execute now** _(optional inline note supported)_
+- **Continue from proposed plan** _(optional inline note; if omitted, Pi asks for modification input and waits.)_
 - **Regenerate plan** _(fresh plan from scratch, no note required)_
 - **Exit plan mode**
 
@@ -148,7 +151,11 @@ Before approval is shown, Pi also critiques the draft plan for atomicity, orderi
 - `/todos` — show tracked plan progress (`✓`/`○`) from extracted `Plan:` steps and `[DONE:n]` markers
 - approved execution runs one step per turn, requires an atomic `jj commit` for that step, then auto-continues to the next remaining todo
 - after each planning turn, the plan-mode action menu includes:
-  - `Continue from proposed plan` _(inline note optional via `Tab`; without note, Pi prompts for modification input and waits)_
+  - a compact review summary for the extracted plan
+  - critique summary / badges when available
+  - quick action hotkeys: `A` approve, `C` continue, `R` regenerate, `X` exit, `E` edit note
+  - `Approve and execute now` _(optional inline note supported)_
+  - `Continue from proposed plan` _(inline note optional via `Tab`/`E`; without note, Pi prompts for modification input and waits)_
   - `Regenerate plan` _(no additional note required)_
 
 ## Development

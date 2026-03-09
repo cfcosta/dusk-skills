@@ -34,17 +34,20 @@ type EventHandler = (event: unknown, ctx: ExtensionContext) => Promise<unknown> 
 
 interface HarnessOptions {
   hasUI?: boolean;
+  customSelection?: { cancelled: boolean; action?: string; note?: string };
 }
 
-function createUiStub() {
+function createUiStub(customSelection?: { cancelled: boolean; action?: string; note?: string }) {
   const notifications: Array<{ message: string; level: "info" | "warning" | "error" }> = [];
   const statuses = new Map<string, string | undefined>();
   const widgets = new Map<string, string[] | undefined>();
+  const customCalls: unknown[] = [];
 
   return {
     notifications,
     statuses,
     widgets,
+    customCalls,
     ui: {
       notify(message: string, level: "info" | "warning" | "error") {
         notifications.push({ message, level });
@@ -59,7 +62,10 @@ function createUiStub() {
         fg: (_color: string, text: string) => text,
         strikethrough: (text: string) => text,
       },
-      custom: async () => ({ cancelled: true }),
+      custom: async (renderer: unknown) => {
+        customCalls.push(renderer);
+        return customSelection ?? { cancelled: true };
+      },
     },
   };
 }
@@ -80,7 +86,7 @@ function createPlanExtensionHarness(options: HarnessOptions = {}) {
   ];
   let activeTools = allTools.map((tool) => tool.name);
 
-  const uiStub = createUiStub();
+  const uiStub = createUiStub(options.customSelection);
   const hasUI = options.hasUI ?? false;
   const ctx = {
     hasUI,
@@ -140,6 +146,19 @@ function createPlanExtensionHarness(options: HarnessOptions = {}) {
   };
 }
 
+function buildPlanText(): string {
+  return [
+    "1) Goal understanding (brief)",
+    "2) Evidence gathered",
+    "3) Uncertainties / assumptions",
+    "4) Plan:",
+    "1. Add a regression test for prompt leakage",
+    "2. Update the approval action UI to show a compact summary",
+    "5) Risks and rollback notes",
+    "6) Ready to execute when approved.",
+  ].join("\n");
+}
+
 test("parseCritiqueVerdict accepts markdown-formatted PASS verdicts", () => {
   expect(parseCritiqueVerdict(`1) **Verdict:** PASS\n2) Issues:\n- none`)).toBe("PASS");
 });
@@ -158,15 +177,17 @@ test("extractTodoItems ignores the ready-to-execute footer", async () => {
   const { extractTodoItems } = await import("./utils");
 
   expect(
-    extractTodoItems([
-      "1) Goal understanding (brief)",
-      "2) Evidence gathered",
-      "3) Uncertainties / assumptions",
-      "4) Plan:",
-      "1. Add a regression test for prompt leakage",
-      "5) Risks and rollback notes",
-      "6) Ready to execute when approved.",
-    ].join("\n")),
+    extractTodoItems(
+      [
+        "1) Goal understanding (brief)",
+        "2) Evidence gathered",
+        "3) Uncertainties / assumptions",
+        "4) Plan:",
+        "1. Add a regression test for prompt leakage",
+        "5) Risks and rollback notes",
+        "6) Ready to execute when approved.",
+      ].join("\n"),
+    ),
   ).toEqual([{ step: 1, text: "A regression test for prompt leakage", completed: false }]);
 });
 
@@ -204,15 +225,7 @@ test("critique pass routes orchestration through a hidden custom message after e
         content: [
           {
             type: "text",
-            text: [
-              "1) Goal understanding (brief)",
-              "2) Evidence gathered",
-              "3) Uncertainties / assumptions",
-              "4) Plan:",
-              "1. Add a regression test for prompt leakage",
-              "5) Risks and rollback notes",
-              '6) Ready to execute when approved.',
-            ].join("\n"),
+            text: buildPlanText(),
           },
         ],
       },
@@ -246,15 +259,7 @@ test("after a PASS critique the plan stays tracked without leaking visible follo
         content: [
           {
             type: "text",
-            text: [
-              "1) Goal understanding (brief)",
-              "2) Evidence gathered",
-              "3) Uncertainties / assumptions",
-              "4) Plan:",
-              "1. Add a regression test for prompt leakage",
-              "5) Risks and rollback notes",
-              '6) Ready to execute when approved.',
-            ].join("\n"),
+            text: buildPlanText(),
           },
         ],
       },
@@ -265,7 +270,8 @@ test("after a PASS critique the plan stays tracked without leaking visible follo
     messages: [
       {
         role: "assistant",
-        content: "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+        content:
+          "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
       },
     ],
   });
@@ -276,11 +282,86 @@ test("after a PASS critique the plan stays tracked without leaking visible follo
     message: "Plan critique passed. Review and approve when ready.",
     level: "info",
   });
+  expect(harness.uiStub.customCalls).toHaveLength(1);
 
   await harness.runCommand("todos");
 
   expect(harness.uiStub.notifications).toContainEqual({
-    message: "Plan progress 0/1\n1. ○ A regression test for prompt leakage",
+    message:
+      "Plan progress 0/2\n1. ○ A regression test for prompt leakage\n2. ○ Approval action UI to show a compact summary",
+    level: "info",
+  });
+});
+
+test("approve action can include an execution note and restores normal tools", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "approve", note: "keep keyboard flow fast" },
+  });
+
+  await harness.runCommand("plan", "on");
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content:
+          "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- compact and ready",
+      },
+    ],
+  });
+
+  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
+  expect(harness.sentUserMessages).toHaveLength(1);
+  expect(harness.sentUserMessages[0]).toContain(
+    "Honor this user execution note while implementing the step: keep keyboard flow fast",
+  );
+});
+
+test("regenerate selection clears tracked todos before sending a refresh prompt", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "regenerate" },
+  });
+
+  await harness.runCommand("plan", "on");
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content:
+          "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+      },
+    ],
+  });
+
+  expect(harness.sentUserMessages).toEqual([
+    "Regenerate the full plan from scratch. Re-check context and provide a refreshed Plan: section.",
+  ]);
+
+  await harness.runCommand("todos");
+
+  expect(harness.uiStub.notifications).toContainEqual({
+    message: "No tracked plan steps. Create a plan in /plan mode first.",
     level: "info",
   });
 });

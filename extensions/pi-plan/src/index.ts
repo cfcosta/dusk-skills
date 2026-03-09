@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { selectPlanNextActionWithInlineNote } from "./plan-action-ui";
+import { selectPlanNextActionWithInlineNote, type PlanApprovalDetails } from "./plan-action-ui";
 import {
   extractTodoItems,
   isSafeReadOnlyCommand,
@@ -106,6 +106,14 @@ Return this exact structure:
 Use PASS only if the plan is executable as-is. Use REFINE if the plan is salvageable with targeted improvements. Use REJECT if the plan is too vague or unsafe and should be replaced.
 `.trim();
 
+interface ApprovalReviewState {
+  stepCount: number;
+  previewSteps: string[];
+  critiqueSummary?: string;
+  badges: string[];
+  wasRevised: boolean;
+}
+
 function notify(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
@@ -154,6 +162,63 @@ function getAssistantTextFromMessage(message: unknown): string {
     .join("\n");
 }
 
+function extractCritiqueSummary(text: string): string | undefined {
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index++) {
+    const normalizedLine = lines[index]?.replace(/\*+/g, "").trim() ?? "";
+    const sameLineMatch = normalizedLine.match(/(?:^\d+[.)]\s*)?Summary\s*(?::|-|–|—)\s*(.+)$/i);
+    if (sameLineMatch?.[1]) {
+      return sameLineMatch[1].replace(/^[-•]\s*/, "").trim();
+    }
+
+    if (/(?:^\d+[.)]\s*)?Summary\s*(?::)?$/i.test(normalizedLine)) {
+      for (let nextIndex = index + 1; nextIndex < lines.length; nextIndex++) {
+        const nextLine = lines[nextIndex]?.replace(/\*+/g, "").trim() ?? "";
+        if (!nextLine) {
+          continue;
+        }
+        return nextLine.replace(/^[-•]\s*/, "").trim();
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function buildReviewBadges(planText: string, items: TodoItem[]): string[] {
+  const badges: string[] = [];
+  const normalized = planText.toLowerCase();
+
+  if (items.length > 0 && items.length <= 5) {
+    badges.push("compact steps");
+  }
+  if (/validation/i.test(planText) || /test/i.test(planText)) {
+    badges.push("validation noted");
+  }
+  if (/risks? and rollback notes?/i.test(planText) || /rollback/i.test(planText)) {
+    badges.push("rollback noted");
+  }
+  if (/uncertainties?\s*\/\s*assumptions/i.test(planText) || /assum/i.test(normalized)) {
+    badges.push("assumptions listed");
+  }
+
+  return badges;
+}
+
+function buildApprovalReviewState(
+  planText: string,
+  items: TodoItem[],
+  options: { critiqueSummary?: string; wasRevised?: boolean } = {},
+): ApprovalReviewState {
+  return {
+    stepCount: items.length,
+    previewSteps: items.slice(0, 3).map((item) => `${item.step}. ${item.text}`),
+    critiqueSummary: options.critiqueSummary,
+    badges: buildReviewBadges(planText, items),
+    wasRevised: options.wasRevised ?? false,
+  };
+}
+
 export default function planExtension(pi: ExtensionAPI): void {
   let planModeEnabled = false;
   let executionMode = false;
@@ -161,12 +226,28 @@ export default function planExtension(pi: ExtensionAPI): void {
   let todoItems: TodoItem[] = [];
   let critiqueState: "idle" | "awaiting_critique" | "awaiting_revision" = "idle";
   let latestPlanDraft = "";
+  let approvalReview: ApprovalReviewState | null = null;
+  let latestCritiqueSummary = "";
+  let planWasRevised = false;
+  let executionConstraintNote = "";
 
   const getAllToolNames = (): string[] => pi.getAllTools().map((tool) => tool.name);
+
+  const resetApprovalReview = (): void => {
+    approvalReview = null;
+    latestCritiqueSummary = "";
+    planWasRevised = false;
+  };
 
   const resetPlanningDraft = (): void => {
     critiqueState = "idle";
     latestPlanDraft = "";
+    resetApprovalReview();
+  };
+
+  const resetExecutionState = (): void => {
+    executionMode = false;
+    executionConstraintNote = "";
   };
 
   const sendHiddenPlanningMessage = (content: string): void => {
@@ -186,12 +267,18 @@ export default function planExtension(pi: ExtensionAPI): void {
   const requestPlanCritique = (ctx: ExtensionContext, planText: string): void => {
     latestPlanDraft = planText;
     critiqueState = "awaiting_critique";
+    approvalReview = buildApprovalReviewState(planText, todoItems, {
+      critiqueSummary: latestCritiqueSummary || undefined,
+      wasRevised: planWasRevised,
+    });
     notify(pi, ctx, "Reviewing the plan with a critique pass before approval.", "info");
     sendHiddenPlanningMessage(`${PLAN_CRITIQUE_PROMPT}\n\nPlan to critique:\n\n${planText}`);
   };
 
   const requestPlanRevision = (ctx: ExtensionContext, critiqueText: string): void => {
     critiqueState = "awaiting_revision";
+    latestCritiqueSummary = extractCritiqueSummary(critiqueText) ?? latestCritiqueSummary;
+    planWasRevised = true;
     notify(pi, ctx, "The critique requested plan refinement. Regenerating the plan.", "warning");
     sendHiddenPlanningMessage(
       [
@@ -220,18 +307,21 @@ export default function planExtension(pi: ExtensionAPI): void {
     return [
       "[APPROVED PLAN EXECUTION]",
       `Current step: ${currentStep.step}. ${currentStep.text}`,
+      executionConstraintNote ? `User execution note: ${executionConstraintNote}` : undefined,
       "",
       "Remaining plan backlog (for context only):",
       backlog,
       "",
       EXECUTION_COMMIT_RULES,
-    ].join("\n");
+    ]
+      .filter((line): line is string => typeof line === "string")
+      .join("\n");
   };
 
   const sendNextExecutionStep = (ctx: ExtensionContext, reason?: string): void => {
     const currentStep = todoItems.find((item) => !item.completed);
     if (!currentStep) {
-      executionMode = false;
+      resetExecutionState();
       setStatus(ctx);
       if (reason) {
         notify(pi, ctx, reason, "info");
@@ -242,10 +332,15 @@ export default function planExtension(pi: ExtensionAPI): void {
     const prompt = [
       EXECUTION_TRIGGER_PROMPT,
       `Complete only step ${currentStep.step}: ${currentStep.text}`,
+      executionConstraintNote
+        ? `Honor this user execution note while implementing the step: ${executionConstraintNote}`
+        : undefined,
       "Implement it, validate it, and create one atomic jujutsu commit for that step before ending the turn.",
       "Use `jj commit <changed paths> -m <message>`, follow Conventional Commits, include a detailed description, and finish with the matching [DONE:n] marker after the commit succeeds.",
       "Do not start the following step in the same turn.",
-    ].join(" ");
+    ]
+      .filter((line): line is string => typeof line === "string")
+      .join(" ");
 
     pi.sendUserMessage(prompt);
   };
@@ -257,7 +352,7 @@ export default function planExtension(pi: ExtensionAPI): void {
     }
 
     if (todoItems.length > 0 && todoItems.every((item) => item.completed)) {
-      executionMode = false;
+      resetExecutionState();
       setStatus(ctx);
       notify(pi, ctx, "All tracked plan steps are complete.", "info");
     }
@@ -346,7 +441,7 @@ export default function planExtension(pi: ExtensionAPI): void {
     }
 
     todoItems = [];
-    executionMode = false;
+    resetExecutionState();
     resetPlanningDraft();
     pi.setActiveTools(planTools);
     planModeEnabled = true;
@@ -364,7 +459,7 @@ export default function planExtension(pi: ExtensionAPI): void {
         notify(pi, ctx, reason);
       }
       if (options.resetProgress) {
-        executionMode = false;
+        resetExecutionState();
         todoItems = [];
         resetPlanningDraft();
         setStatus(ctx);
@@ -375,7 +470,7 @@ export default function planExtension(pi: ExtensionAPI): void {
     planModeEnabled = false;
     restoreNormalTools();
     if (options.resetProgress) {
-      executionMode = false;
+      resetExecutionState();
       todoItems = [];
       resetPlanningDraft();
     }
@@ -532,6 +627,11 @@ export default function planExtension(pi: ExtensionAPI): void {
       const verdict = parseCritiqueVerdict(lastAssistantText);
       if (verdict === "PASS") {
         critiqueState = "idle";
+        latestCritiqueSummary = extractCritiqueSummary(lastAssistantText) ?? "ready";
+        approvalReview = buildApprovalReviewState(latestPlanDraft, todoItems, {
+          critiqueSummary: latestCritiqueSummary,
+          wasRevised: planWasRevised,
+        });
         notify(pi, ctx, "Plan critique passed. Review and approve when ready.", "info");
       } else {
         requestPlanRevision(ctx, lastAssistantText);
@@ -544,6 +644,10 @@ export default function planExtension(pi: ExtensionAPI): void {
       }
 
       todoItems = extracted;
+      approvalReview = buildApprovalReviewState(lastAssistantText, extracted, {
+        critiqueSummary: latestCritiqueSummary || undefined,
+        wasRevised: planWasRevised,
+      });
       setStatus(ctx);
       requestPlanCritique(ctx, lastAssistantText);
       return;
@@ -551,13 +655,24 @@ export default function planExtension(pi: ExtensionAPI): void {
 
     setStatus(ctx);
 
-    const selection = await selectPlanNextActionWithInlineNote(ctx.ui);
+    const selection = await selectPlanNextActionWithInlineNote(
+      ctx.ui,
+      approvalReview ??
+        ({
+          stepCount: todoItems.length,
+          previewSteps: todoItems.slice(0, 3).map((item) => `${item.step}. ${item.text}`),
+          critiqueSummary: latestCritiqueSummary || undefined,
+          badges: [],
+          wasRevised: planWasRevised,
+        } satisfies PlanApprovalDetails),
+    );
     if (selection.cancelled || !selection.action) {
       return;
     }
 
     if (selection.action === "approve") {
       executionMode = todoItems.length > 0;
+      executionConstraintNote = selection.note?.trim() ?? "";
       resetPlanningDraft();
       exitPlanMode(ctx, "Plan approved. Entering YOLO mode for execution.");
 
@@ -567,6 +682,7 @@ export default function planExtension(pi: ExtensionAPI): void {
 
     if (selection.action === "regenerate") {
       todoItems = [];
+      resetExecutionState();
       resetPlanningDraft();
       setStatus(ctx);
       pi.sendUserMessage(
@@ -577,7 +693,7 @@ export default function planExtension(pi: ExtensionAPI): void {
 
     if (selection.action === "continue") {
       resetPlanningDraft();
-      const continueNote = selection.continueNote?.trim() ?? "";
+      const continueNote = selection.note?.trim() ?? "";
       if (continueNote.length === 0) {
         notify(
           pi,
@@ -613,7 +729,7 @@ export default function planExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
-    executionMode = false;
+    resetExecutionState();
     if (ctx.hasUI) {
       ctx.ui.setStatus(STATUS_KEY, undefined);
       ctx.ui.setWidget(TODO_WIDGET_KEY, undefined);
