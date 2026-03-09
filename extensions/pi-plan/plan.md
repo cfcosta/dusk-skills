@@ -1,44 +1,40 @@
-# pi-plan Feature Plan
+# pi-plan architecture notes
 
-## Goal
+This file tracks the repo-local architecture of the vendored `pi-plan` extension inside `duskpi`.
 
-Extend `pi-plan` from basic read-only planning into a lightweight execution companion by adding:
+## Current shape
 
-1. Plan-progress visibility with `/todos`
+- `src/index.ts` is only the bootstrap layer. It registers `pi-plan` through `registerGuidedWorkflowExtension(...)` and wires `/todos` to the workflow instance.
+- `src/workflow.ts` defines `PiPlanWorkflow`, a thin `GuidedWorkflow` consumer with `pi-plan`-specific policy and UI hooks.
+- Shared guided state in `packages/workflow-core` owns:
+  - correlated planning requests
+  - hidden critique and revision orchestration
+  - approval action dispatch
+  - execution item tracking and `[DONE:n]` syncing
+  - `/todos` data sources
+  - status and widget lifecycle cleanup on session boundaries
+- Local `pi-plan` code still owns:
+  - plan-mode tool switching and restore behavior
+  - plan-specific system prompts and critique text
+  - the inline approval action UI
+  - user-facing notifications and command text
 
-## Added Capabilities
+## User-visible behavior
 
-- `/todos` reports current plan step completion (`[DONE:n]` markers).
-- Plan-mode next action menu includes:
-  - `Continue from proposed plan` (iterative refinement)
-  - `Regenerate plan` (fresh plan output)
+- `/plan` keeps planning read-only until approval.
+- Every draft plan gets a hidden critique pass before the approval UI appears.
+- Approved execution runs one step per turn and expects one atomic `jj` commit per step.
+- `/todos`, status text, and widget output all reflect the shared guided execution state.
 
-## Out of Scope (moved outside `pi-plan` package)
+## Shared-workflow boundary
 
-The following are not implemented in `pi-plan` package code:
+- `PhaseWorkflow` remains the shared runtime for `bug-fix`, `refactor`, `test-audit`, and `owasp-fix`.
+- `GuidedWorkflow` exists alongside it for planning flows that need hidden turns, approval state, execution tracking, and session lifecycle hooks.
+- This vendored copy is repo-local and private; upstream publishing docs do not apply here.
 
-- `/handoff <goal>` command (user-local runtime asset under `~/.pi/agent/extensions`)
-- `/tmux` status/widget command (provided by `pi-exec-plane` root extension)
-- `tmux-helper` skill documentation (user-local skill under `~/.agents/skills`)
+## Validation
 
-## Critique orchestration strategy
-
-For the critique-pass regression, the supported non-visible follow-up path in Pi is:
-
-- `pi.sendMessage(...)` with a custom message
-- `display: false` so the orchestration message stays hidden from the TUI
-- `triggerTurn: true` with `deliverAs: "steer"` or `"followUp"` when the extension needs the agent to respond
-
-This is the documented alternative to `pi.sendUserMessage(...)`, which always injects an actual user-visible message and therefore cannot be used for hidden critique/revision orchestration.
-
-Chosen fix strategy for the next implementation step:
-
-1. keep the critique pass feature
-2. stop using `pi.sendUserMessage(...)` for critique and revision control prompts
-3. rework the critique loop to use hidden custom messages via `pi.sendMessage(...)`
-4. preserve the visible planning UX while keeping critique output internal to the extension flow
-
-## Follow-ups
-
-- Add package-level tests for `/todos` command paths.
-- Consider plan-state persistence across session resume.
+```bash
+cd extensions/pi-plan && bun install && bun run check
+cd packages/workflow-core && bun install && bun run check
+```

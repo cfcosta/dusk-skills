@@ -2,16 +2,17 @@
 
 Vendored planning extension used by `duskpi`.
 
-This directory is the repo-local copy bundled under `extensions/pi-plan`. It is not treated as a standalone npm/git package in this repo; external install and release instructions from the upstream package do not apply here.
+This directory is the repo-local copy bundled under `extensions/pi-plan`. It is not treated as a standalone npm or git package in this repo, so upstream install and release instructions do not apply here.
 
 ## What it adds
 
-- **Default mode:** execute directly (YOLO)
-- **Plan mode:** read-only investigation + concrete execution plan
-- **/todos:** check current tracked plan progress
-- **Execution starts only after approval** from the plan-mode UI prompt
-- **Every draft plan gets an internal hidden critique pass** before approval is offered
-- **Approved execution auto-advances step-by-step** with one `jj` commit per plan step
+- default execution-first mode (YOLO)
+- read-only `/plan` mode for investigation and plan drafting
+- an internal hidden critique and revision pass before approval
+- an approval menu with approve, continue, regenerate, and exit actions
+- `/todos` progress reporting
+- step-by-step approved execution with one `jj` commit per plan step
+- status and todo-widget output backed by shared guided workflow state
 
 ```txt
 /plan on
@@ -20,14 +21,23 @@ This directory is the repo-local copy bundled under `extensions/pi-plan`. It is 
 
 ## Why
 
-Sometimes you want speed, sometimes you want safety.
+Sometimes you want speed. Sometimes you want a review point before the first edit.
 
-This extension gives both:
+`pi-plan` gives you both:
 
-- **No global slowdown** in normal workflows (default remains execution-first)
-- **Structured planning mode** only when you request it
-- **Read-only guardrails** while planning (tool + shell protections)
-- **Explicit approval handoff** before implementation begins
+- default workflows stay fast because normal mode still executes directly
+- planning mode stays read-only until you approve execution
+- every draft plan gets a critique pass before the approval UI appears
+- approved plans run one step at a time with tracked progress
+
+## Repo architecture
+
+In `duskpi`, `pi-plan` is the repo's `GuidedWorkflow` consumer.
+
+- `src/index.ts` is a thin bootstrap that registers the guided workflow extension and the separate `/todos` command.
+- `src/workflow.ts` defines `PiPlanWorkflow`, which configures the shared guided lifecycle for planning, critique, approval, execution, status rendering, and session cleanup.
+- `packages/workflow-core/src/guided-workflow.ts` owns the shared state for request correlation, hidden follow-up turns, execution tracking, and lifecycle reset.
+- Local `pi-plan` code still owns plan-specific prompts, plan-mode tool switching, the inline approval UI, and user-facing notifications.
 
 ## Repo-local usage
 
@@ -40,7 +50,7 @@ bun install
 bun run check
 ```
 
-## Quick Start
+## Quick start
 
 ### 1) Start planning mode
 
@@ -60,17 +70,17 @@ Implement release-note generator with changelog validation
 /plan Implement release-note generator with changelog validation
 ```
 
-This enables plan mode (if needed) and immediately sends the task.
+This enables plan mode if needed and immediately starts the planning request.
 
-### 3) Approve or continue planning
+### 3) Review, refine, or approve
 
-After a plan is generated, Pi first runs an internal hidden critique pass. The critique/revision prompts stay out of the visible chat, while plan-status notifications still appear normally. Once the plan passes critique, you’ll get a richer approval menu with:
+After a plan is generated, Pi first runs an internal hidden critique pass. The critique and revision prompts stay out of the visible chat, while status notifications still appear normally. Once the plan passes critique, you get an approval menu with:
 
-- a compact review summary (step count + first extracted steps)
-- critique summary / quality badges when available
+- a compact review summary built from the extracted plan steps
+- critique summary and quality badges when available
 - direct hotkeys (`A/C/R/X`, plus `E` to edit a note)
 - **Approve and execute now** _(optional inline note supported)_
-- **Continue from proposed plan** _(optional inline note; if omitted, Pi asks for modification input and waits.)_
+- **Continue from proposed plan** _(optional inline note; if omitted, Pi asks for modification input and waits)_
 - **Regenerate plan** _(fresh plan from scratch, no note required)_
 - **Exit plan mode**
 
@@ -80,68 +90,71 @@ Choosing **Approve and execute now** automatically:
 2. restores normal tools,
 3. triggers implementation for the next open step,
 4. expects one atomic `jj` commit for that step,
-5. then automatically prompts the next remaining step until the todo list is complete.
+5. then prompts the next remaining step until the todo list is complete.
 
 ## Modes
 
-| Mode           | Behavior                                                 | Safety policy                            |
-| -------------- | -------------------------------------------------------- | ---------------------------------------- |
-| Default (YOLO) | Executes directly unless you explicitly request planning | No extra restrictions                    |
-| Plan (`/plan`) | Gathers evidence and returns an execution plan           | Read-only tools + mutating action blocks |
+| Mode | Behavior | Safety policy |
+| --- | --- | --- |
+| Default (YOLO) | Executes directly unless you explicitly request planning | No extra restrictions |
+| Plan (`/plan`) | Gathers evidence and returns an execution plan | Read-only tools plus mutating action blocks |
 
-## Plan-Mode Guardrails
+## Plan-mode guardrails
 
 ### Tool restrictions
 
 In plan mode:
 
-- Mutating tools are blocked: `edit`, `write`, `ast_rewrite`
-- Active tools are switched to a read-only subset when available
+- mutating tools are blocked: `edit`, `write`, `ast_rewrite`
+- active tools are switched to a read-only subset when available
 
 ### Bash restrictions
 
 `bash` commands are filtered through a read-only policy:
 
-- ✅ inspection commands (examples): `ls`, `cat`, `grep`, `find`, `git status`, `git log`
-- ❌ mutating commands (examples): `rm`, `mv`, `npm install`, `git commit`, redirection writes (`>`, `>>`)
+- allowed examples: `ls`, `grep`, `find`, `git status`, `git log`
+- blocked examples: `rm`, `mv`, `npm install`, `git commit`, redirection writes (`>`, `>>`)
 
-## Plan Output Contract
+## Plan output contract
 
 In plan mode, the system prompt enforces this structure:
 
 1. Goal understanding
-2. Evidence gathered (files/symbols/docs checked)
-3. Uncertainties / assumptions
-4. Plan (step objective, target files/components, validation)
+2. Evidence gathered (files, symbols, docs checked)
+3. Uncertainties and assumptions
+4. Plan (step objective, target files or components, validation)
 5. Risks and rollback notes
 6. End with: `Ready to execute when approved.`
 
-Before approval is shown, Pi also critiques the draft plan for atomicity, ordering, specificity, validation quality, executability, and metadata noise. That critique loop runs through hidden extension messages rather than visible user-chat turns. Weak plans are automatically sent back for refinement.
+Before approval is shown, Pi critiques the draft plan for atomicity, ordering, specificity, validation quality, executability, and metadata noise. Weak plans are automatically sent back for refinement through hidden extension messages.
 
 ## Commands
 
 ### Plan workflow
 
-- `/plan` — toggle plan mode on/off
+- `/plan` — toggle plan mode on or off
 - `/plan on` — enable plan mode
 - `/plan off` — disable plan mode
 - `/plan status` — show current status
 - `/plan <task>` — enable mode if needed and start planning for `<task>`
-- `/todos` — show tracked plan progress (`✓`/`○`) from extracted `Plan:` steps and `[DONE:n]` markers
-- approved execution runs one step per turn, requires an atomic `jj commit` for that step, then auto-continues to the next remaining todo
-- after each planning turn, the plan-mode action menu includes:
+- `/todos` — show tracked plan progress (`✓` and `○`) from extracted `Plan:` steps and `[DONE:n]` markers
+- approved execution runs one step per turn, requires one atomic `jj` commit for that step, then auto-continues to the next remaining todo
+- after each planning turn, the action menu includes:
   - a compact review summary for the extracted plan
-  - critique summary / badges when available
+  - critique summary and badges when available
   - quick action hotkeys: `A` approve, `C` continue, `R` regenerate, `X` exit, `E` edit note
   - `Approve and execute now` _(optional inline note supported)_
-  - `Continue from proposed plan` _(inline note optional via `Tab`/`E`; without note, Pi prompts for modification input and waits)_
+  - `Continue from proposed plan` _(inline note optional via `Tab` or `E`; without a note, Pi prompts for modification input and waits)_
   - `Regenerate plan` _(no additional note required)_
 
-## Project Structure
+## Project structure
 
 - `index.ts` - extension entry re-export
-- `src/index.ts` - plan mode orchestration, `/todos`, and command wiring
+- `src/index.ts` - guided bootstrap and `/todos` command wiring
+- `src/workflow.ts` - `PiPlanWorkflow` built on shared `GuidedWorkflow`
 - `src/plan-action-ui.ts` - approval action UI
-- `src/utils.ts` - read-only bash checks + plan step extraction/progress helpers
+- `src/utils.ts` - read-only bash checks and plan step extraction helpers
 - `src/index.test.ts` - extension regression coverage
-- `plan.md` - package-level feature plan notes
+- `plan.md` - repo-local architecture and feature notes
+- `packages/workflow-core/src/guided-workflow.ts` - shared guided runtime used by this extension
+- `packages/workflow-core/src/register-guided-workflow-extension.ts` - guided extension registration helper

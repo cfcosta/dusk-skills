@@ -129,7 +129,9 @@ Use it when you want Pi to:
 - narrow the blast radius
 - then execute only the approved refactor plan
 
-These workflow-style extensions share a common runtime in `packages/workflow-core/`, so they behave consistently.
+These four workflow-style extensions share the `PhaseWorkflow` runtime in `packages/workflow-core/`, so they keep the same phase-driven behavior and safety hooks.
+
+The bundled `pi-plan` extension uses the same package's `GuidedWorkflow` runtime instead. That guided path covers read-only planning, hidden critique and revision turns, approval callbacks, step tracking, and session cleanup.
 
 ### 2. Switch into explicit planning mode
 
@@ -138,13 +140,14 @@ The bundled `pi-plan` extension adds:
 - `/plan`
 - `/todos`
 
-Use `/plan` when you want Pi to stay read-only while it investigates and proposes an execution plan. Once the plan looks right, you can approve implementation.
+Use `/plan` when you want Pi to stay read-only while it investigates, proposes an execution plan, runs an internal critique pass, and waits for approval before switching back to execution.
 
 This is useful when you want:
 
 - more safety before edits
 - a concrete step list
 - a review point before execution
+- tracked step-by-step execution after approval
 
 ### 3. Use prompt templates for recurring tasks
 
@@ -200,14 +203,17 @@ Notable entries:
 
 ### `packages/workflow-core/`
 
-Shared runtime used by the workflow-style extensions.
+Shared runtime package used by both workflow families in this repo.
 
-This holds the reusable orchestration pieces for:
+It holds the reusable orchestration pieces for:
 
-- prompt loading
-- workflow phases
-- message parsing
-- extension-facing abstractions
+- `PhaseWorkflow` for `/bug-fix`, `/owasp-fix`, `/test-audit`, and `/refactor`
+- `GuidedWorkflow` for `/plan`
+- registration helpers for both workflow styles
+- prompt loading and message parsing helpers
+- extension-facing API abstractions and local typings
+
+See `packages/workflow-core/README.md` for the current architecture split.
 
 ### `prompts/`
 
