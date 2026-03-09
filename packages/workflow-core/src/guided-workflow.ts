@@ -23,6 +23,9 @@ export type GuidedCritiqueVerdict = "PASS" | "REFINE" | "REJECT";
 
 type PendingResponseKind = "planning" | "critique" | "revision";
 
+const DEFAULT_MUTATING_TOOL_NAMES = new Set(["edit", "write", "multiedit"]);
+const DEFAULT_MUTATION_NAME_FRAGMENTS = ["edit", "write"];
+
 export interface GuidedWorkflowState {
   phase: GuidedWorkflowPhase;
   goal?: string;
@@ -47,11 +50,19 @@ export interface GuidedWorkflowCritiqueOptions {
   customMessageType?: string;
 }
 
+export interface GuidedWorkflowPlanningPolicy {
+  isWriteCapableTool?: (toolName?: string) => boolean;
+  isSafeReadOnlyCommand?: (command: string) => boolean;
+  writeBlockedReason?: string;
+  bashBlockedReason?: (command: string) => string;
+}
+
 export interface GuidedWorkflowOptions {
   id: string;
   parseGoalArg?: (args: unknown) => string | undefined;
   buildPlanningPrompt?: (args: { goal?: string }) => string;
   critique?: GuidedWorkflowCritiqueOptions;
+  planningPolicy?: GuidedWorkflowPlanningPolicy;
   text: GuidedWorkflowText;
 }
 
@@ -104,8 +115,34 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     }
   }
 
-  async handleToolCall(_event: ToolCallEvent, _ctx: ExtensionContext): Promise<void> {
-    return undefined;
+  async handleToolCall(
+    event: ToolCallEvent,
+    _ctx: ExtensionContext,
+  ): Promise<{ block: true; reason: string } | void> {
+    if (!this.isPlanningPhase(this.state.phase)) {
+      return;
+    }
+
+    if (this.isWriteCapableTool(event.toolName)) {
+      return {
+        block: true,
+        reason:
+          this.options.planningPolicy?.writeBlockedReason ??
+          "Guided workflow planning phase: writes are disabled",
+      };
+    }
+
+    if (isBashTool(event.toolName) && this.options.planningPolicy?.isSafeReadOnlyCommand) {
+      const command = extractBashCommand(event.input);
+      if (!this.options.planningPolicy.isSafeReadOnlyCommand(command)) {
+        return {
+          block: true,
+          reason:
+            this.options.planningPolicy.bashBlockedReason?.(command) ??
+            `Guided workflow planning phase blocked a potentially mutating bash command: ${command}`,
+        };
+      }
+    }
   }
 
   async handleAgentEnd(
@@ -276,6 +313,18 @@ export class GuidedWorkflow implements GuidedWorkflowController {
       : "Create a concrete implementation plan for the current task.";
   }
 
+  private isPlanningPhase(phase: GuidedWorkflowPhase): boolean {
+    return phase === "planning" || phase === "approval";
+  }
+
+  private isWriteCapableTool(toolName?: string): boolean {
+    if (this.options.planningPolicy?.isWriteCapableTool) {
+      return this.options.planningPolicy.isWriteCapableTool(toolName);
+    }
+
+    return isDefaultMutatingToolName(toolName);
+  }
+
   private createIdleState(): GuidedWorkflowState {
     return {
       phase: "idle",
@@ -336,4 +385,28 @@ function extractMessageText(content: unknown): string | undefined {
     .trim();
 
   return text.length > 0 ? text : undefined;
+}
+
+function isBashTool(toolName?: string): boolean {
+  return (toolName ?? "").trim().toLowerCase() === "bash";
+}
+
+function extractBashCommand(input: unknown): string {
+  if (typeof input !== "object" || input === null) {
+    return "";
+  }
+
+  const command = (input as { command?: unknown }).command;
+  return typeof command === "string" ? command : "";
+}
+
+function isDefaultMutatingToolName(toolName?: string): boolean {
+  const normalizedToolName = (toolName ?? "").trim().toLowerCase();
+  if (DEFAULT_MUTATING_TOOL_NAMES.has(normalizedToolName)) {
+    return true;
+  }
+
+  return DEFAULT_MUTATION_NAME_FRAGMENTS.some((fragment) => {
+    return normalizedToolName.includes(fragment);
+  });
 }

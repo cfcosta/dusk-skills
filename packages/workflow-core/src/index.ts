@@ -38,6 +38,7 @@ export type {
   GuidedWorkflowCritiqueOptions,
   GuidedWorkflowOptions,
   GuidedWorkflowPhase,
+  GuidedWorkflowPlanningPolicy,
   GuidedWorkflowResult,
   GuidedWorkflowState,
 } from "./guided-workflow";

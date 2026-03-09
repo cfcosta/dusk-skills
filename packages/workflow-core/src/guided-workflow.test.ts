@@ -418,6 +418,76 @@ test("GuidedWorkflow marks critique PASS responses as approval-ready", async () 
   });
 });
 
+test("GuidedWorkflow blocks write-capable tools during planning", async () => {
+  const { api } = createApi();
+  const workflow = new GuidedWorkflow(api, {
+    id: "guided-test",
+    parseGoalArg: parseTrimmedStringArg,
+    planningPolicy: {
+      isWriteCapableTool(toolName) {
+        return (toolName ?? "").trim().toLowerCase() === "write";
+      },
+      writeBlockedReason: "planning is read-only",
+    },
+    text: { alreadyRunning: "guided running" },
+  });
+  const { ctx } = createContext();
+
+  await workflow.handleCommand("first run", ctx);
+  const result = await workflow.handleToolCall({ toolName: "Write" }, ctx);
+
+  assert.deepEqual(result, { block: true, reason: "planning is read-only" });
+});
+
+test("GuidedWorkflow allows safe read-only bash during planning", async () => {
+  const { api } = createApi();
+  const workflow = new GuidedWorkflow(api, {
+    id: "guided-test",
+    parseGoalArg: parseTrimmedStringArg,
+    planningPolicy: {
+      isSafeReadOnlyCommand(command) {
+        return command === "ls -la";
+      },
+    },
+    text: { alreadyRunning: "guided running" },
+  });
+  const { ctx } = createContext();
+
+  await workflow.handleCommand("first run", ctx);
+  const result = await workflow.handleToolCall(
+    { toolName: "Bash", input: { command: "ls -la" } },
+    ctx,
+  );
+
+  assert.equal(result, undefined);
+});
+
+test("GuidedWorkflow blocks mutating bash during planning with an explicit reason", async () => {
+  const { api } = createApi();
+  const workflow = new GuidedWorkflow(api, {
+    id: "guided-test",
+    parseGoalArg: parseTrimmedStringArg,
+    planningPolicy: {
+      isSafeReadOnlyCommand(command) {
+        return command === "ls -la";
+      },
+      bashBlockedReason(command) {
+        return `blocked: ${command}`;
+      },
+    },
+    text: { alreadyRunning: "guided running" },
+  });
+  const { ctx } = createContext();
+
+  await workflow.handleCommand("first run", ctx);
+  const result = await workflow.handleToolCall(
+    { toolName: "bash", input: { command: "rm -rf tmp" } },
+    ctx,
+  );
+
+  assert.deepEqual(result, { block: true, reason: "blocked: rm -rf tmp" });
+});
+
 test("GuidedWorkflow non-correlation lifecycle hooks are currently no-ops", async () => {
   const { api } = createApi();
   const workflow = new GuidedWorkflow(api, {
