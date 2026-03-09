@@ -28,7 +28,7 @@ export function loadPromptFiles<Keys extends string>(
 ): PromptLoadResult<Record<Keys, string>> {
   try {
     const prompts = Object.fromEntries(
-      Object.entries(fileNames).map(([key, fileName]) => [
+      (Object.entries(fileNames) as Array<[Keys, string]>).map(([key, fileName]) => [
         key,
         readPromptFile(promptDirectory, fileName),
       ]),
