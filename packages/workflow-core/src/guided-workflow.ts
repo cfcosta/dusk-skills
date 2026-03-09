@@ -57,12 +57,41 @@ export interface GuidedWorkflowPlanningPolicy {
   bashBlockedReason?: (command: string) => string;
 }
 
+export type GuidedWorkflowApprovalAction = "approve" | "continue" | "regenerate" | "exit";
+
+export interface GuidedWorkflowApprovalSelection {
+  cancelled?: boolean;
+  action?: GuidedWorkflowApprovalAction;
+  note?: string;
+}
+
+export interface GuidedWorkflowApprovalPromptArgs {
+  goal?: string;
+  planText: string;
+  critiqueText?: string;
+  note?: string;
+}
+
+export interface GuidedWorkflowApprovalOptions {
+  selectAction: (
+    args: Omit<GuidedWorkflowApprovalPromptArgs, "note">,
+    ctx: ExtensionContext,
+  ) =>
+    | GuidedWorkflowApprovalSelection
+    | Promise<GuidedWorkflowApprovalSelection>;
+  buildContinuePrompt?: (args: GuidedWorkflowApprovalPromptArgs) => string;
+  buildRegeneratePrompt?: (args: GuidedWorkflowApprovalPromptArgs) => string;
+  onApprove?: (args: GuidedWorkflowApprovalPromptArgs, ctx: ExtensionContext) => unknown;
+  onExit?: (args: GuidedWorkflowApprovalPromptArgs, ctx: ExtensionContext) => unknown;
+}
+
 export interface GuidedWorkflowOptions {
   id: string;
   parseGoalArg?: (args: unknown) => string | undefined;
   buildPlanningPrompt?: (args: { goal?: string }) => string;
   critique?: GuidedWorkflowCritiqueOptions;
   planningPolicy?: GuidedWorkflowPlanningPolicy;
+  approval?: GuidedWorkflowApprovalOptions;
   text: GuidedWorkflowText;
 }
 
@@ -71,6 +100,7 @@ export class GuidedWorkflow implements GuidedWorkflowController {
   private requestSequence = 0;
   private pendingResponseKind?: PendingResponseKind;
   private latestPlanText?: string;
+  private latestCritiqueText?: string;
 
   constructor(
     private readonly api: ExtensionAPI,
@@ -100,13 +130,14 @@ export class GuidedWorkflow implements GuidedWorkflowController {
       awaitingResponse: true,
     };
     this.pendingResponseKind = "planning";
+    this.latestPlanText = undefined;
+    this.latestCritiqueText = undefined;
 
     try {
       this.api.sendUserMessage(promptWithRequestId);
       return { kind: "ok" };
     } catch {
-      this.state = this.createIdleState();
-      this.pendingResponseKind = undefined;
+      this.resetWorkflowState();
       ctx.ui.notify(
         this.options.text.sendFailed ?? "Guided workflow stopped: failed to send planning prompt.",
         "error",
@@ -175,16 +206,18 @@ export class GuidedWorkflow implements GuidedWorkflowController {
 
     if (this.pendingResponseKind === "revision") {
       this.latestPlanText = assistantResult.text;
+      this.latestCritiqueText = undefined;
       return this.sendCritiquePrompt(assistantResult.text, ctx);
     }
 
     this.latestPlanText = assistantResult.text;
+    this.latestCritiqueText = undefined;
     if (this.options.critique) {
       return this.sendCritiquePrompt(assistantResult.text, ctx);
     }
 
     this.markApprovalReady();
-    return { kind: "ok" };
+    return this.handleApprovalReady(ctx);
   }
 
   handleBeforeAgentStart(_event: BeforeAgentStartEvent, _ctx: ExtensionContext): void {
@@ -206,14 +239,15 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     return undefined;
   }
 
-  private handleCritiqueResponse(
+  private async handleCritiqueResponse(
     critiqueText: string,
     ctx: ExtensionContext,
-  ): GuidedWorkflowResult {
+  ): Promise<GuidedWorkflowResult> {
+    this.latestCritiqueText = critiqueText;
     const verdict = this.options.critique?.parseCritiqueVerdict(critiqueText) ?? "REJECT";
     if (verdict === "PASS") {
       this.markApprovalReady();
-      return { kind: "ok" };
+      return this.handleApprovalReady(ctx);
     }
 
     return this.sendRevisionPrompt(critiqueText, verdict, ctx);
@@ -273,9 +307,7 @@ export class GuidedWorkflow implements GuidedWorkflowController {
         },
       );
     } catch {
-      this.state = this.createIdleState();
-      this.pendingResponseKind = undefined;
-      this.latestPlanText = undefined;
+      this.resetWorkflowState();
       ctx.ui.notify(
         this.options.text.sendFailed ?? "Guided workflow stopped: failed to send planning prompt.",
         "error",
@@ -290,6 +322,94 @@ export class GuidedWorkflow implements GuidedWorkflowController {
       awaitingResponse: true,
     };
     this.pendingResponseKind = nextResponseKind;
+    return { kind: "ok" };
+  }
+
+  private async handleApprovalReady(ctx: ExtensionContext): Promise<GuidedWorkflowResult> {
+    if (!this.options.approval?.selectAction || !this.latestPlanText) {
+      return { kind: "ok" };
+    }
+
+    const selection = await this.options.approval.selectAction(
+      {
+        goal: this.state.goal,
+        planText: this.latestPlanText,
+        critiqueText: this.latestCritiqueText,
+      },
+      ctx,
+    );
+
+    if (selection.cancelled || !selection.action) {
+      return { kind: "ok" };
+    }
+
+    const args: GuidedWorkflowApprovalPromptArgs = {
+      goal: this.state.goal,
+      planText: this.latestPlanText,
+      critiqueText: this.latestCritiqueText,
+      note: normalizeNote(selection.note),
+    };
+
+    switch (selection.action) {
+      case "approve":
+        await this.options.approval.onApprove?.(args, ctx);
+        this.state = {
+          ...this.state,
+          phase: "executing",
+          pendingRequestId: undefined,
+          awaitingResponse: false,
+        };
+        this.pendingResponseKind = undefined;
+        return { kind: "ok" };
+      case "continue":
+        return this.sendPlanningFollowUp(
+          this.options.approval.buildContinuePrompt?.(args) ?? buildDefaultContinuePrompt(args),
+          ctx,
+        );
+      case "regenerate":
+        return this.sendPlanningFollowUp(
+          this.options.approval.buildRegeneratePrompt?.(args) ?? buildDefaultRegeneratePrompt(args),
+          ctx,
+          { resetDraftState: true },
+        );
+      case "exit":
+        await this.options.approval.onExit?.(args, ctx);
+        this.resetWorkflowState();
+        return { kind: "ok" };
+    }
+  }
+
+  private sendPlanningFollowUp(
+    prompt: string,
+    ctx: ExtensionContext,
+    options: { resetDraftState?: boolean } = {},
+  ): GuidedWorkflowResult {
+    const requestId = this.nextRequestId();
+    const promptWithRequestId = `${prompt}\n\n${requestIdMarker(requestId)}`;
+
+    try {
+      this.api.sendUserMessage(promptWithRequestId);
+    } catch {
+      this.resetWorkflowState();
+      ctx.ui.notify(
+        this.options.text.sendFailed ?? "Guided workflow stopped: failed to send planning prompt.",
+        "error",
+      );
+      return { kind: "recoverable_error", reason: "prompt_send_failed" };
+    }
+
+    if (options.resetDraftState) {
+      this.latestPlanText = undefined;
+      this.latestCritiqueText = undefined;
+    }
+
+    this.state = {
+      ...this.state,
+      phase: "planning",
+      pendingRequestId: requestId,
+      awaitingResponse: true,
+    };
+    this.pendingResponseKind = "planning";
     return { kind: "ok" };
   }
 
@@ -311,6 +431,13 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     return goal
       ? `Create a concrete implementation plan for: ${goal}`
       : "Create a concrete implementation plan for the current task.";
+  }
+
+  private resetWorkflowState() {
+    this.state = this.createIdleState();
+    this.pendingResponseKind = undefined;
+    this.latestPlanText = undefined;
+    this.latestCritiqueText = undefined;
   }
 
   private isPlanningPhase(phase: GuidedWorkflowPhase): boolean {
@@ -409,4 +536,19 @@ function isDefaultMutatingToolName(toolName?: string): boolean {
   return DEFAULT_MUTATION_NAME_FRAGMENTS.some((fragment) => {
     return normalizedToolName.includes(fragment);
   });
+}
+
+function normalizeNote(note?: string): string | undefined {
+  const normalized = note?.replace(/\s+/g, " ").trim();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function buildDefaultContinuePrompt(args: GuidedWorkflowApprovalPromptArgs): string {
+  const note = args.note ? ` User note: ${args.note}.` : "";
+  return `Continue planning from the current plan.${note}`;
+}
+
+function buildDefaultRegeneratePrompt(args: GuidedWorkflowApprovalPromptArgs): string {
+  const note = args.note ? ` User note: ${args.note}.` : "";
+  return `Regenerate the full plan from scratch.${note}`;
 }

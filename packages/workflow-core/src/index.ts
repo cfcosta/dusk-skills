@@ -35,6 +35,10 @@ export type { PromptLoadResult } from "./prompt-loader";
 export { GuidedWorkflow } from "./guided-workflow";
 export type {
   GuidedCritiqueVerdict,
+  GuidedWorkflowApprovalAction,
+  GuidedWorkflowApprovalOptions,
+  GuidedWorkflowApprovalPromptArgs,
+  GuidedWorkflowApprovalSelection,
   GuidedWorkflowCritiqueOptions,
   GuidedWorkflowOptions,
   GuidedWorkflowPhase,
