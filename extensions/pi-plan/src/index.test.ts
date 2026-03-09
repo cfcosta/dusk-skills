@@ -59,6 +59,7 @@ function createUiStub() {
         fg: (_color: string, text: string) => text,
         strikethrough: (text: string) => text,
       },
+      custom: async () => ({ cancelled: true }),
     },
   };
 }
@@ -213,6 +214,58 @@ test("critique pass routes orchestration through a hidden custom message after e
   );
   expect(harness.uiStub.notifications).toContainEqual({
     message: "Reviewing the plan with a critique pass before approval.",
+    level: "info",
+  });
+});
+
+test("after a PASS critique the plan stays tracked without leaking visible follow-up messages", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "on");
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: [
+              "1) Goal understanding (brief)",
+              "2) Evidence gathered",
+              "3) Uncertainties / assumptions",
+              "4) Plan:",
+              "1. Add a regression test for prompt leakage",
+              "5) Risks and rollback notes",
+              '6) Ready to execute when approved.',
+            ].join("\n"),
+          },
+        ],
+      },
+    ],
+  });
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+      },
+    ],
+  });
+
+  expect(harness.sentUserMessages).toHaveLength(0);
+  expect(harness.sentMessages).toHaveLength(1);
+  expect(harness.uiStub.notifications).toContainEqual({
+    message: "Plan critique passed. Review and approve when ready.",
+    level: "info",
+  });
+
+  await harness.runCommand("todos");
+
+  expect(harness.uiStub.notifications).toContainEqual({
+    message:
+      "Plan progress 0/2\n1. ○ A regression test for prompt leakage\n2. ○ Ready to execute when approved.",
     level: "info",
   });
 });
