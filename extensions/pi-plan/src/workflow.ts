@@ -143,6 +143,8 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   private executionConstraintNote = "";
 
   constructor(private readonly pi: ExtensionAPI) {
+    let self!: PiPlanWorkflow;
+
     super(pi, {
       id: STATUS_KEY,
       parseGoalArg: parsePlanGoalArg,
@@ -167,11 +169,30 @@ export class PiPlanWorkflow extends GuidedWorkflow {
         parseCritiqueVerdict,
         customMessageType: "pi-plan-internal",
       },
+      approval: {
+        async selectAction(args, ctx) {
+          return self.selectApprovalAction(args, ctx);
+        },
+        buildContinuePrompt(args) {
+          return self.buildContinuePrompt(args.note);
+        },
+        buildRegeneratePrompt() {
+          return self.buildRegeneratePrompt();
+        },
+        onApprove(args, ctx) {
+          return self.handleApprovalApprove(args.note, ctx);
+        },
+        onExit(_args, ctx) {
+          return self.handleApprovalExit(ctx);
+        },
+      },
       text: {
         alreadyRunning: "Plan mode is already enabled.",
         sendFailed: "Plan mode stopped: failed to send planning prompt.",
       },
     });
+
+    self = this;
   }
 
   async handleTodosCommand(_args: unknown, ctx: ExtensionContext): Promise<void> {
@@ -319,7 +340,6 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     }
 
     const pendingResponseKind = this.getPendingPiPlanResponseKind(messages);
-    let shouldOpenApproval = false;
 
     if (this.hasPendingPlanningRequest()) {
       const correlationFailure = this.validatePendingPlanningResponse(messages);
@@ -357,11 +377,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
           );
         }
 
-        const result = await super.handleAgentEnd(event, ctx);
-        if (result.kind !== "ok") {
-          return result;
-        }
-        return { kind: "ok" };
+        return super.handleAgentEnd(event, ctx);
       }
 
       const result = await super.handleAgentEnd(event, ctx);
@@ -371,16 +387,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
 
       if (pendingResponseKind === "critique" && lastAssistantText) {
         const verdict = parseCritiqueVerdict(lastAssistantText);
-        if (verdict === "PASS") {
-          this.latestCritiqueSummary = extractCritiqueSummary(lastAssistantText) ?? "ready";
-          this.approvalReview = buildApprovalReviewState(this.latestPlanDraft, this.todoItems, {
-            critiqueSummary: this.latestCritiqueSummary,
-            wasRevised: this.planWasRevised,
-          });
-          notify(this.pi, ctx, "Plan critique passed. Review and approve when ready.", "info");
-          await this.resetPlanningRequestState(ctx);
-          shouldOpenApproval = true;
-        } else {
+        if (verdict !== "PASS") {
           this.latestCritiqueSummary =
             extractCritiqueSummary(lastAssistantText) ?? this.latestCritiqueSummary;
           this.planWasRevised = true;
@@ -390,103 +397,23 @@ export class PiPlanWorkflow extends GuidedWorkflow {
             "The critique requested plan refinement. Regenerating the plan.",
             "warning",
           );
-          return { kind: "ok" };
         }
-      } else {
-        return { kind: "ok" };
       }
+
+      return result;
     }
 
-    if (!shouldOpenApproval) {
-      if (!this.planModeEnabled || !ctx.hasUI || !lastAssistantText) {
-        return { kind: "ok" };
-      }
-
-      const captured = this.capturePlanDraft(lastAssistantText, ctx);
-      if (!captured) {
-        return { kind: "ok" };
-      }
-
-      notify(this.pi, ctx, "Reviewing the plan with a critique pass before approval.", "info");
-      return this.beginCritiqueFlow(lastAssistantText, ctx);
-    }
-
-    if (!this.planModeEnabled || !ctx.hasUI) {
+    if (!this.planModeEnabled || !ctx.hasUI || !lastAssistantText) {
       return { kind: "ok" };
     }
 
-    this.setStatus(ctx);
-
-    const selection = await selectPlanNextActionWithInlineNote(
-      ctx.ui as never,
-      this.approvalReview ??
-        ({
-          stepCount: this.todoItems.length,
-          previewSteps: this.todoItems.slice(0, 3).map((item) => `${item.step}. ${item.text}`),
-          critiqueSummary: this.latestCritiqueSummary || undefined,
-          badges: [],
-          wasRevised: this.planWasRevised,
-        } satisfies PlanApprovalDetails),
-    );
-    if (selection.cancelled || !selection.action) {
+    const captured = this.capturePlanDraft(lastAssistantText, ctx);
+    if (!captured) {
       return { kind: "ok" };
     }
 
-    if (selection.action === "approve") {
-      this.executionMode = this.todoItems.length > 0;
-      this.executionConstraintNote = selection.note?.trim() ?? "";
-      this.resetPlanningDraft();
-      this.exitPlanMode(ctx, "Plan approved. Entering YOLO mode for execution.");
-
-      this.sendNextExecutionStep(ctx, "Plan approved. Entering YOLO mode for execution.");
-      return { kind: "ok" };
-    }
-
-    if (selection.action === "regenerate") {
-      this.todoItems = [];
-      this.resetExecutionState();
-      this.resetPlanningDraft();
-      this.setStatus(ctx);
-      return this.startPlanningRequest(
-        "Regenerate the full plan from scratch. Re-check context and provide a refreshed Plan: section.",
-        ctx,
-      );
-    }
-
-    if (selection.action === "continue") {
-      this.resetPlanningDraft();
-      const continueNote = selection.note?.trim() ?? "";
-      if (continueNote.length === 0) {
-        notify(
-          this.pi,
-          ctx,
-          "Please enter the requested modifications, then send your message to continue planning. Waiting for your input.",
-          "info",
-        );
-        return { kind: "ok" };
-      }
-
-      const firstOpenStep = this.todoItems.find((item) => !item.completed);
-      if (firstOpenStep) {
-        return this.startPlanningRequest(
-          `Continue planning from the proposed plan. User note: ${continueNote}. Focus on step ${firstOpenStep.step}: ${firstOpenStep.text}. Refine files, validation, and risks in read-only mode.`,
-          ctx,
-        );
-      }
-
-      return this.startPlanningRequest(
-        `Continue planning from the proposed plan. User note: ${continueNote}. Refine implementation details without regenerating the full plan.`,
-        ctx,
-      );
-    }
-
-    if (selection.action === "exit") {
-      this.exitPlanMode(ctx, "Exited plan mode without execution.", {
-        resetProgress: true,
-      });
-    }
-
-    return { kind: "ok" };
+    notify(this.pi, ctx, "Reviewing the plan with a critique pass before approval.", "info");
+    return this.beginCritiqueFlow(lastAssistantText, ctx);
   }
 
   async handleSessionStart(_event: SessionStartEvent, ctx: ExtensionContext): Promise<void> {
@@ -516,6 +443,89 @@ export class PiPlanWorkflow extends GuidedWorkflow {
 
   private async resetPlanningRequestState(ctx: ExtensionContext): Promise<void> {
     await super.handleSessionShutdown({ reason: "pi-plan-consumed-planning-response" }, ctx);
+  }
+
+  private async selectApprovalAction(
+    args: { planText: string; critiqueText?: string; note?: string },
+    ctx: ExtensionContext,
+  ): Promise<{ cancelled?: boolean; action?: "approve" | "continue" | "regenerate" | "exit"; note?: string }> {
+    this.latestPlanDraft = args.planText;
+    this.latestCritiqueSummary = args.critiqueText
+      ? extractCritiqueSummary(args.critiqueText) ?? "ready"
+      : this.latestCritiqueSummary;
+    this.approvalReview = buildApprovalReviewState(args.planText, this.todoItems, {
+      critiqueSummary: this.latestCritiqueSummary || undefined,
+      wasRevised: this.planWasRevised,
+    });
+    this.setStatus(ctx);
+    notify(this.pi, ctx, "Plan critique passed. Review and approve when ready.", "info");
+
+    if (!ctx.hasUI) {
+      return { cancelled: true };
+    }
+
+    const selection = await selectPlanNextActionWithInlineNote(
+      ctx.ui as never,
+      this.approvalReview ??
+        ({
+          stepCount: this.todoItems.length,
+          previewSteps: this.todoItems.slice(0, 3).map((item) => `${item.step}. ${item.text}`),
+          critiqueSummary: this.latestCritiqueSummary || undefined,
+          badges: [],
+          wasRevised: this.planWasRevised,
+        } satisfies PlanApprovalDetails),
+    );
+
+    if (selection.action === "continue") {
+      this.resetPlanningDraft();
+      const continueNote = selection.note?.trim() ?? "";
+      if (continueNote.length === 0) {
+        notify(
+          this.pi,
+          ctx,
+          "Please enter the requested modifications, then send your message to continue planning. Waiting for your input.",
+          "info",
+        );
+        return { cancelled: true };
+      }
+    }
+
+    if (selection.action === "regenerate") {
+      this.todoItems = [];
+      this.resetExecutionState();
+      this.resetPlanningDraft();
+      this.setStatus(ctx);
+    }
+
+    return selection;
+  }
+
+  private buildContinuePrompt(note?: string): string {
+    const continueNote = note?.trim() ?? "";
+    const firstOpenStep = this.todoItems.find((item) => !item.completed);
+    if (firstOpenStep) {
+      return `Continue planning from the proposed plan. User note: ${continueNote}. Focus on step ${firstOpenStep.step}: ${firstOpenStep.text}. Refine files, validation, and risks in read-only mode.`;
+    }
+
+    return `Continue planning from the proposed plan. User note: ${continueNote}. Refine implementation details without regenerating the full plan.`;
+  }
+
+  private buildRegeneratePrompt(): string {
+    return "Regenerate the full plan from scratch. Re-check context and provide a refreshed Plan: section.";
+  }
+
+  private handleApprovalApprove(note: string | undefined, ctx: ExtensionContext): void {
+    this.executionMode = this.todoItems.length > 0;
+    this.executionConstraintNote = note?.trim() ?? "";
+    this.resetPlanningDraft();
+    this.exitPlanMode(ctx, "Plan approved. Entering YOLO mode for execution.");
+    this.sendNextExecutionStep(ctx, "Plan approved. Entering YOLO mode for execution.");
+  }
+
+  private handleApprovalExit(ctx: ExtensionContext): void {
+    this.exitPlanMode(ctx, "Exited plan mode without execution.", {
+      resetProgress: true,
+    });
   }
 
   private capturePlanDraft(planText: string, ctx: ExtensionContext): boolean {

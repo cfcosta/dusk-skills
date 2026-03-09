@@ -577,6 +577,33 @@ test("after a PASS critique the plan stays tracked without leaking visible follo
   });
 });
 
+test("continue selection sends a correlated planning follow-up and keeps read-only tools", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "continue", note: "split step two" },
+  });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
+
+  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
+  expect(harness.sentUserMessages).toHaveLength(1);
+  expect(harness.sentUserMessages[0]).toContain("Continue planning from the proposed plan. User note: split step two.");
+  expect(extractRequestId(harness.sentUserMessages[0] ?? "")).toBeTruthy();
+});
+
 test("approve action can include an execution note and restores normal tools", async () => {
   const harness = createPlanExtensionHarness({
     hasUI: true,
@@ -604,6 +631,37 @@ test("approve action can include an execution note and restores normal tools", a
   expect(harness.sentUserMessages[0]).toContain(
     "Honor this user execution note while implementing the step: keep keyboard flow fast",
   );
+});
+
+test("exit selection restores normal tools and clears tracked progress", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "exit" },
+  });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
+
+  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
+  expect(harness.sentUserMessages).toHaveLength(0);
+
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications).toContainEqual({
+    message: "No tracked plan steps. Create a plan in /plan mode first.",
+    level: "info",
+  });
 });
 
 test("regenerate selection clears tracked todos before sending a refresh prompt", async () => {
