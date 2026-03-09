@@ -129,12 +129,13 @@ interface ApprovalReviewState {
   wasRevised: boolean;
 }
 
+type PendingPiPlanResponseKind = "planning" | "critique" | "revision";
+
 export class PiPlanWorkflow extends GuidedWorkflow {
   private planModeEnabled = false;
   private executionMode = false;
   private restoreTools: string[] | null = null;
   private todoItems: TodoItem[] = [];
-  private critiqueState: "idle" | "awaiting_critique" | "awaiting_revision" = "idle";
   private latestPlanDraft = "";
   private approvalReview: ApprovalReviewState | null = null;
   private latestCritiqueSummary = "";
@@ -146,6 +147,26 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       id: STATUS_KEY,
       parseGoalArg: parsePlanGoalArg,
       buildPlanningPrompt: ({ goal }) => goal ?? "Create a concrete implementation plan.",
+      critique: {
+        buildCritiquePrompt: ({ planText }) => {
+          return `${PLAN_CRITIQUE_PROMPT}\n\nPlan to critique:\n\n${planText}`;
+        },
+        buildRevisionPrompt: ({ planText, critiqueText }) => {
+          return [
+            "Revise the latest plan using the critique below.",
+            "Keep plan mode read-only and return the full plan again using the required plan output contract.",
+            "Make each step atomic, executable, validation-backed, and suitable for one jujutsu commit.",
+            "",
+            "Original plan:",
+            planText,
+            "",
+            "Critique:",
+            critiqueText,
+          ].join("\n");
+        },
+        parseCritiqueVerdict,
+        customMessageType: "pi-plan-internal",
+      },
       text: {
         alreadyRunning: "Plan mode is already enabled.",
         sendFailed: "Plan mode stopped: failed to send planning prompt.",
@@ -280,7 +301,8 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     event: AgentEndEvent,
     ctx: ExtensionContext,
   ): Promise<GuidedWorkflowResult> {
-    const lastAssistantText = [...(event.messages ?? [])]
+    const messages = event.messages ?? [];
+    const lastAssistantText = [...messages]
       .reverse()
       .map(getAssistantTextFromMessage)
       .find((text) => text.length > 0);
@@ -296,47 +318,100 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return { kind: "ok" };
     }
 
-    const hasPendingPlanningRequest = this.hasPendingPlanningRequest();
-    if (hasPendingPlanningRequest) {
+    const pendingResponseKind = this.getPendingPiPlanResponseKind(messages);
+    let shouldOpenApproval = false;
+
+    if (this.hasPendingPlanningRequest()) {
+      const correlationFailure = this.validatePendingPlanningResponse(messages);
+      if (correlationFailure) {
+        return correlationFailure;
+      }
+
+      if (pendingResponseKind === "planning") {
+        if (!lastAssistantText) {
+          return super.handleAgentEnd(event, ctx);
+        }
+
+        const captured = this.capturePlanDraft(lastAssistantText, ctx);
+        await this.resetPlanningRequestState(ctx);
+        if (!captured) {
+          return { kind: "ok" };
+        }
+
+        notify(this.pi, ctx, "Reviewing the plan with a critique pass before approval.", "info");
+        return this.beginCritiqueFlow(lastAssistantText, ctx);
+      }
+
+      if (pendingResponseKind === "revision") {
+        if (!lastAssistantText) {
+          return super.handleAgentEnd(event, ctx);
+        }
+
+        const captured = this.capturePlanDraft(lastAssistantText, ctx);
+        if (captured) {
+          notify(
+            this.pi,
+            ctx,
+            "Reviewing the plan with a critique pass before approval.",
+            "info",
+          );
+        }
+
+        const result = await super.handleAgentEnd(event, ctx);
+        if (result.kind !== "ok") {
+          return result;
+        }
+        return { kind: "ok" };
+      }
+
       const result = await super.handleAgentEnd(event, ctx);
       if (result.kind !== "ok") {
         return result;
       }
 
-      await this.resetPlanningRequestState(ctx);
-    }
-
-    if (!this.planModeEnabled || !ctx.hasUI || !lastAssistantText) {
-      return { kind: "ok" };
-    }
-
-    if (this.critiqueState === "awaiting_critique") {
-      const verdict = parseCritiqueVerdict(lastAssistantText);
-      if (verdict === "PASS") {
-        this.critiqueState = "idle";
-        this.latestCritiqueSummary = extractCritiqueSummary(lastAssistantText) ?? "ready";
-        this.approvalReview = buildApprovalReviewState(this.latestPlanDraft, this.todoItems, {
-          critiqueSummary: this.latestCritiqueSummary,
-          wasRevised: this.planWasRevised,
-        });
-        notify(this.pi, ctx, "Plan critique passed. Review and approve when ready.", "info");
+      if (pendingResponseKind === "critique" && lastAssistantText) {
+        const verdict = parseCritiqueVerdict(lastAssistantText);
+        if (verdict === "PASS") {
+          this.latestCritiqueSummary = extractCritiqueSummary(lastAssistantText) ?? "ready";
+          this.approvalReview = buildApprovalReviewState(this.latestPlanDraft, this.todoItems, {
+            critiqueSummary: this.latestCritiqueSummary,
+            wasRevised: this.planWasRevised,
+          });
+          notify(this.pi, ctx, "Plan critique passed. Review and approve when ready.", "info");
+          await this.resetPlanningRequestState(ctx);
+          shouldOpenApproval = true;
+        } else {
+          this.latestCritiqueSummary =
+            extractCritiqueSummary(lastAssistantText) ?? this.latestCritiqueSummary;
+          this.planWasRevised = true;
+          notify(
+            this.pi,
+            ctx,
+            "The critique requested plan refinement. Regenerating the plan.",
+            "warning",
+          );
+          return { kind: "ok" };
+        }
       } else {
-        this.requestPlanRevision(ctx, lastAssistantText);
         return { kind: "ok" };
       }
-    } else {
-      const extracted = extractTodoItems(lastAssistantText);
-      if (extracted.length === 0) {
+    }
+
+    if (!shouldOpenApproval) {
+      if (!this.planModeEnabled || !ctx.hasUI || !lastAssistantText) {
         return { kind: "ok" };
       }
 
-      this.todoItems = extracted;
-      this.approvalReview = buildApprovalReviewState(lastAssistantText, extracted, {
-        critiqueSummary: this.latestCritiqueSummary || undefined,
-        wasRevised: this.planWasRevised,
-      });
-      this.setStatus(ctx);
-      this.requestPlanCritique(ctx, lastAssistantText);
+      const captured = this.capturePlanDraft(lastAssistantText, ctx);
+      if (!captured) {
+        return { kind: "ok" };
+      }
+
+      notify(this.pi, ctx, "Reviewing the plan with a critique pass before approval.", "info");
+      return this.beginCritiqueFlow(lastAssistantText, ctx);
+    }
+
+    if (!this.planModeEnabled || !ctx.hasUI) {
       return { kind: "ok" };
     }
 
@@ -443,6 +518,59 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     await super.handleSessionShutdown({ reason: "pi-plan-consumed-planning-response" }, ctx);
   }
 
+  private capturePlanDraft(planText: string, ctx: ExtensionContext): boolean {
+    const extracted = extractTodoItems(planText);
+    if (extracted.length === 0) {
+      return false;
+    }
+
+    this.latestPlanDraft = planText;
+    this.todoItems = extracted;
+    this.approvalReview = buildApprovalReviewState(planText, extracted, {
+      critiqueSummary: this.latestCritiqueSummary || undefined,
+      wasRevised: this.planWasRevised,
+    });
+    this.setStatus(ctx);
+    return true;
+  }
+
+  private validatePendingPlanningResponse(messages: unknown[]): GuidedWorkflowResult | undefined {
+    const pendingRequestId = this.getStateSnapshot().pendingRequestId;
+    const lastPromptText = extractLastPromptText(messages);
+    const observedRequestId = lastPromptText ? extractRequestId(lastPromptText) : undefined;
+    if (!pendingRequestId || observedRequestId !== pendingRequestId) {
+      return { kind: "blocked", reason: "unmatched_agent_end" };
+    }
+
+    return undefined;
+  }
+
+  private getPendingPiPlanResponseKind(messages: unknown[]): PendingPiPlanResponseKind | undefined {
+    const lastPrompt = extractLastPrompt(messages);
+    if (!lastPrompt) {
+      return undefined;
+    }
+
+    if (lastPrompt.role === "user") {
+      return "planning";
+    }
+
+    const promptText = extractMessageText(lastPrompt.content);
+    if (!promptText) {
+      return undefined;
+    }
+
+    if (promptText.includes("Revise the latest plan using the critique below.")) {
+      return "revision";
+    }
+
+    if (promptText.includes("Critique the latest proposed implementation plan for execution quality.")) {
+      return "critique";
+    }
+
+    return undefined;
+  }
+
   private getAllToolNames(): string[] {
     return this.pi.getAllTools().map((tool) => tool.name);
   }
@@ -454,7 +582,6 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   }
 
   private resetPlanningDraft(): void {
-    this.critiqueState = "idle";
     this.latestPlanDraft = "";
     this.resetApprovalReview();
   }
@@ -462,51 +589,6 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   private resetExecutionState(): void {
     this.executionMode = false;
     this.executionConstraintNote = "";
-  }
-
-  private sendHiddenPlanningMessage(content: string): void {
-    this.pi.sendMessage(
-      {
-        customType: "pi-plan-internal",
-        content,
-        display: false,
-      },
-      {
-        triggerTurn: true,
-        deliverAs: "followUp",
-      },
-    );
-  }
-
-  private requestPlanCritique(ctx: ExtensionContext, planText: string): void {
-    this.latestPlanDraft = planText;
-    this.critiqueState = "awaiting_critique";
-    this.approvalReview = buildApprovalReviewState(planText, this.todoItems, {
-      critiqueSummary: this.latestCritiqueSummary || undefined,
-      wasRevised: this.planWasRevised,
-    });
-    notify(this.pi, ctx, "Reviewing the plan with a critique pass before approval.", "info");
-    this.sendHiddenPlanningMessage(`${PLAN_CRITIQUE_PROMPT}\n\nPlan to critique:\n\n${planText}`);
-  }
-
-  private requestPlanRevision(ctx: ExtensionContext, critiqueText: string): void {
-    this.critiqueState = "awaiting_revision";
-    this.latestCritiqueSummary = extractCritiqueSummary(critiqueText) ?? this.latestCritiqueSummary;
-    this.planWasRevised = true;
-    notify(this.pi, ctx, "The critique requested plan refinement. Regenerating the plan.", "warning");
-    this.sendHiddenPlanningMessage(
-      [
-        "Revise the latest plan using the critique below.",
-        "Keep plan mode read-only and return the full plan again using the required plan output contract.",
-        "Make each step atomic, executable, validation-backed, and suitable for one jujutsu commit.",
-        "",
-        "Original plan:",
-        this.latestPlanDraft,
-        "",
-        "Critique:",
-        critiqueText,
-      ].join("\n"),
-    );
   }
 
   private getExecutionPrompt(): string {
@@ -727,24 +809,51 @@ function getAssistantTextFromMessage(message: unknown): string {
     return "";
   }
 
-  if (typeof candidate.content === "string") {
-    return candidate.content;
+  return extractMessageText(candidate.content) ?? "";
+}
+
+function extractLastPrompt(
+  messages: unknown[],
+): { role?: unknown; content?: unknown } | undefined {
+  const typedMessages = messages.filter((message): message is { role?: unknown; content?: unknown } => {
+    return typeof message === "object" && message !== null;
+  });
+
+  return [...typedMessages].reverse().find((message) => {
+    return message.role === "user" || message.role === "custom";
+  });
+}
+
+function extractLastPromptText(messages: unknown[]): string | undefined {
+  const prompt = extractLastPrompt(messages);
+  return prompt ? extractMessageText(prompt.content) : undefined;
+}
+
+function extractMessageText(content: unknown): string | undefined {
+  if (typeof content === "string") {
+    const text = content.trim();
+    return text.length > 0 ? text : undefined;
   }
 
-  if (!Array.isArray(candidate.content)) {
-    return "";
+  if (!Array.isArray(content)) {
+    return undefined;
   }
 
-  return candidate.content
-    .filter(
-      (block): block is { type?: string; text?: string } =>
-        typeof block === "object" &&
-        block !== null &&
-        (block as { type?: string }).type === "text" &&
-        typeof (block as { text?: string }).text === "string",
-    )
+  const text = content
+    .filter((block): block is { type?: string; text?: string } => {
+      return typeof block === "object" && block !== null;
+    })
+    .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text ?? "")
-    .join("\n");
+    .join("\n")
+    .trim();
+
+  return text.length > 0 ? text : undefined;
+}
+
+function extractRequestId(message: string): string | undefined {
+  const match = message.match(/<!--\s*workflow-request-id:([^>]+)\s*-->/i);
+  return match?.[1]?.trim();
 }
 
 function extractCritiqueSummary(text: string): string | undefined {

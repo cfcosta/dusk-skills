@@ -299,6 +299,20 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     return undefined;
   }
 
+  protected beginCritiqueFlow(
+    planText: string,
+    ctx: ExtensionContext,
+  ): GuidedWorkflowResult {
+    this.latestPlanText = planText;
+    this.latestCritiqueText = undefined;
+    if (this.options.critique) {
+      return this.sendCritiquePrompt(planText, ctx);
+    }
+
+    this.markApprovalReady();
+    return { kind: "ok" };
+  }
+
   private async handleCritiqueResponse(
     critiqueText: string,
     ctx: ExtensionContext,

@@ -164,6 +164,27 @@ function extractRequestId(prompt: string): string | undefined {
   return match?.[1]?.trim();
 }
 
+async function emitMatchedHiddenResponse(
+  harness: ReturnType<typeof createPlanExtensionHarness>,
+  assistantText: string,
+) {
+  const hiddenPrompt = String(harness.sentMessages.at(-1)?.content ?? "");
+  expect(hiddenPrompt).toContain("workflow-request-id");
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "custom",
+        content: hiddenPrompt,
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: assistantText }],
+      },
+    ],
+  });
+}
+
 test("parseCritiqueVerdict accepts markdown-formatted PASS verdicts", () => {
   expect(parseCritiqueVerdict(`1) **Verdict:** PASS\n2) Issues:\n- none`)).toBe("PASS");
 });
@@ -360,10 +381,119 @@ test("critique pass routes orchestration through a hidden custom message after e
   expect(String(harness.sentMessages[0]?.content)).toContain(
     "Critique the latest proposed implementation plan for execution quality.",
   );
+  expect(extractRequestId(String(harness.sentMessages[0]?.content ?? ""))).toBeTruthy();
   expect(harness.uiStub.notifications).toContainEqual({
     message: "Reviewing the plan with a critique pass before approval.",
     level: "info",
   });
+});
+
+test("hidden critique responses ignore unmatched agent_end payloads", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  const critiquePrompt = String(harness.sentMessages[0]?.content ?? "");
+  const critiqueRequestId = extractRequestId(critiquePrompt);
+  expect(critiqueRequestId).toBeTruthy();
+
+  const result = await harness.eventHandlers.get("agent_end")?.[0]?.(
+    {
+      messages: [
+        {
+          role: "custom",
+          content: critiquePrompt.replace(critiqueRequestId ?? "", "pi-plan-999"),
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready" }],
+        },
+      ],
+    },
+    harness.ctx,
+  );
+
+  expect(result).toEqual({ kind: "blocked", reason: "unmatched_agent_end" });
+  expect(harness.uiStub.customCalls).toHaveLength(0);
+});
+
+test("REFINE critique responses route through a hidden revision follow-up", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: REFINE\n2) Issues:\n- split step two\n3) Required fixes:\n- make the steps smaller\n4) Summary:\n- refine it",
+  );
+
+  expect(harness.sentMessages).toHaveLength(2);
+  expect(harness.sentMessages[1]).toMatchObject({
+    customType: "pi-plan-internal",
+    display: false,
+  });
+  expect(String(harness.sentMessages[1]?.content)).toContain(
+    "Revise the latest plan using the critique below.",
+  );
+  expect(extractRequestId(String(harness.sentMessages[1]?.content ?? ""))).toBeTruthy();
+  expect(harness.uiStub.notifications).toContainEqual({
+    message: "The critique requested plan refinement. Regenerating the plan.",
+    level: "warning",
+  });
+});
+
+test("revised hidden plan drafts re-enter critique before approval", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: REFINE\n2) Issues:\n- split step two\n3) Required fixes:\n- make the steps smaller\n4) Summary:\n- refine it",
+  );
+
+  await emitMatchedHiddenResponse(
+    harness,
+    [
+      "1) Goal understanding (brief)",
+      "2) Evidence gathered",
+      "3) Uncertainties / assumptions",
+      "4) Plan:",
+      "1. Add a regression test for prompt leakage",
+      "2. Split the approval UI update into a focused summary step",
+      "5) Risks and rollback notes",
+      "6) Ready to execute when approved.",
+    ].join("\n"),
+  );
+
+  expect(harness.sentMessages).toHaveLength(3);
+  expect(String(harness.sentMessages[2]?.content)).toContain(
+    "Critique the latest proposed implementation plan for execution quality.",
+  );
+  expect(extractRequestId(String(harness.sentMessages[2]?.content ?? ""))).toBeTruthy();
 });
 
 test("indented plan output still reaches the approval UI after critique", async () => {
@@ -398,15 +528,10 @@ test("indented plan output still reaches the approval UI after critique", async 
     ],
   });
 
-  await harness.emit("agent_end", {
-    messages: [
-      {
-        role: "assistant",
-        content:
-          "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
-      },
-    ],
-  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
 
   expect(harness.uiStub.customCalls).toHaveLength(1);
 });
@@ -430,15 +555,10 @@ test("after a PASS critique the plan stays tracked without leaking visible follo
     ],
   });
 
-  await harness.emit("agent_end", {
-    messages: [
-      {
-        role: "assistant",
-        content:
-          "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
-      },
-    ],
-  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
 
   expect(harness.sentUserMessages).toHaveLength(0);
   expect(harness.sentMessages).toHaveLength(1);
@@ -474,15 +594,10 @@ test("approve action can include an execution note and restores normal tools", a
     ],
   });
 
-  await harness.emit("agent_end", {
-    messages: [
-      {
-        role: "assistant",
-        content:
-          "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- compact and ready",
-      },
-    ],
-  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- compact and ready",
+  );
 
   expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
   expect(harness.sentUserMessages).toHaveLength(1);
@@ -508,15 +623,10 @@ test("regenerate selection clears tracked todos before sending a refresh prompt"
     ],
   });
 
-  await harness.emit("agent_end", {
-    messages: [
-      {
-        role: "assistant",
-        content:
-          "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
-      },
-    ],
-  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
 
   expect(harness.sentUserMessages).toHaveLength(1);
   expect(harness.sentUserMessages[0]).toContain(
