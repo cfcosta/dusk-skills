@@ -217,7 +217,7 @@ test("workflow recovers cleanly when sendUserMessage throws", async () => {
 
 test("workflow executes executor phase with latest arbiter output", async () => {
   const { workflow, ctx, sentMessages, widgets } = createHarness({
-    selectChoice: "Execute refactors (TDD workflow)",
+    selectChoice: "Execute refactors (test-backed workflow)",
   });
 
   await workflow.handleCommand("", ctx);
@@ -377,6 +377,34 @@ test("real prompt bundle enforces responsibility-first naming guidance", () => {
     /materially change an existing symbol's responsibility while preserving a misleading old name/i,
   );
   assert.match(loaded.prompts.mapper, /existing names that have become inaccurate/i);
+});
+
+test("real prompt bundle treats coverage gaps as execution work instead of a veto", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(
+    loaded.prompts.mapper,
+    /do not discard a structurally valuable candidate only because existing coverage is weak/i,
+  );
+  assert.match(
+    loaded.prompts.skeptic,
+    /weak current coverage is not by itself a reason to reject a structurally valuable refactor/i,
+  );
+  assert.match(
+    loaded.prompts.arbiter,
+    /thin coverage increases execution work; it does not by itself invalidate a good refactor/i,
+  );
+  assert.match(
+    loaded.prompts.executor,
+    /missing starting coverage is not a reason to abandon an approved refactor/i,
+  );
+  assert.match(loaded.prompts.executor, /test-backed workflow/i);
 });
 
 test("workflow reports invalid assistant payload instead of retrying as empty output", async () => {

@@ -4,16 +4,17 @@ You will receive the **approved refactor plan** (from the Arbiter stage). Your j
 
 ## Core objective
 
-Execute every approved refactor with a **strict tests-first workflow** and create **one jujutsu commit per refactor step**.
+Execute every approved refactor with a **disciplined test-backed workflow** and create **one jujutsu commit per refactor step**.
 
 ## Mandatory process (for EACH approved refactor step)
 
-### Step 1: Write regression tests FIRST
+### Step 1: Add or update the regression coverage for this step
 
 - Implement the tests from the Arbiter's test delta plan for this step.
 - These tests must validate the behavioral invariants that this refactor touches.
-- Run the new tests and confirm they PASS against the CURRENT (pre-refactor) code (**GREEN baseline**).
-- If new tests fail against current code, the invariant understanding is wrong — STOP and report.
+- Prefer adding the tests before the structural change so you can confirm the current behavior when practical.
+- If a pure pre-refactor GREEN baseline is impractical, build the smallest targeted harness needed, complete the structural change, and finish with explicit verification that the invariant now stays protected.
+- Missing starting coverage is not a reason to abandon an approved refactor; it is part of the implementation work for the step.
 
 ### Step 2: Execute the minimal refactor
 
@@ -23,8 +24,9 @@ Execute every approved refactor with a **strict tests-first workflow** and creat
 
 ### Step 3: Verify all tests pass
 
-- Run ALL tests (not just the new ones) — must stay **GREEN**.
-- If any test fails, revert the refactor and report the failure. Do not push forward.
+- Run ALL relevant tests for the affected area, and run the full test suite when the project can do so at reasonable cost.
+- Confirm the new or updated regression coverage passes after the refactor.
+- If verification fails, revert the refactor and report the failure. Do not push forward.
 
 ### Step 4: Run quality gates
 
@@ -40,9 +42,9 @@ Execute every approved refactor with a **strict tests-first workflow** and creat
 
 ## Safety rules
 
-- **Never skip the tests-first step.** Regression tests must exist and pass BEFORE refactoring.
+- **Never skip the coverage work for the step.** Every approved step must leave behind either stronger regression coverage or an explicit, evidence-backed statement that existing coverage was already sufficient.
 - **Never batch multiple refactor steps into one commit.**
-- **Stop immediately if tests break.** Do not attempt to "fix forward" — revert and report.
+- **Stop immediately if verification fails.** Do not attempt to "fix forward" — revert and report.
 - **Do not change unrelated code.** Stay within the approved blast radius.
 - **Do not skip quality gates.**
 - **Execute steps in the order specified by the Arbiter's commit plan.** The ordering exists for dependency safety.
@@ -76,10 +78,10 @@ If a planned step does not fit one of these actions exactly, still execute the a
 For each refactor step:
 
 1. **Step ID/title**
-2. **New tests written** (list with brief description)
-3. **GREEN baseline evidence** (test pass confirmation before refactor)
+2. **Coverage work added** (new or updated tests with brief description)
+3. **Baseline evidence** (what was verified before or during the step to anchor current behavior)
 4. **Refactor summary** (what changed)
-5. **GREEN verification evidence** (all tests pass after refactor)
+5. **Verification evidence** (tests/commands that passed after the refactor)
 6. **Quality gate results** (summary)
 7. **Commit command used**
 8. **Commit id/hash**
@@ -88,5 +90,5 @@ At the end, provide:
 
 - Total refactor steps executed
 - Total commits created
-- Total new regression tests added
+- Total regression tests added or updated
 - Any steps not executed with reasons

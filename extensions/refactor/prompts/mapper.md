@@ -20,9 +20,17 @@ You are a refactor mapping agent. Analyze the target codebase area thoroughly an
 ## What to skip
 
 - Cosmetic-only changes (formatting, comment rewording) with no structural benefit
-- Changes that would require rewriting tests without improving invariants
+- Changes whose only payoff would be rewriting tests or adapting test internals, without improving production-code invariants
 - Refactors in code scheduled for removal or replacement
 - Style preferences that don't affect maintainability
+
+## Coverage calibration
+
+Do not discard a structurally valuable candidate only because existing coverage is weak.
+
+- Record the exact invariants that would need protection.
+- Note where current tests are thin, missing, or misleading.
+- Describe the targeted regression tests that should be added during execution to make the refactor safe.
 
 ## Naming signal
 
@@ -73,6 +81,7 @@ A consolidated list of all behavioral invariants across all candidates. For each
 - The invariant (concrete, testable statement)
 - Where it is currently exercised (existing tests, if any)
 - Coverage gap: is the invariant actually validated by existing tests? (YES / NO / PARTIAL)
+- Targeted test delta: what test should be added during execution if coverage is not already adequate
 
 ### 4. Coverage Assessment
 

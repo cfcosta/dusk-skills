@@ -45,7 +45,7 @@ export class RefactorWorkflow extends PhaseWorkflow<PromptBundle> {
         complete: "Refactor workflow complete!",
         cancelled: "Refactor cancelled.",
         selectTitle: "Refactor - Analysis Complete",
-        executeOption: "Execute refactors (TDD workflow)",
+        executeOption: "Execute refactors (test-backed workflow)",
         refineOption: "Refine the analysis",
         cancelOption: "Cancel",
         refineEditorLabel: "Refine analysis:",
