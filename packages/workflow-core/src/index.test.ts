@@ -108,12 +108,30 @@ type TestPromptResult =
   | PromptSnapshot<typeof DEFAULT_PROMPTS>
   | PromptLoadResult<typeof DEFAULT_PROMPTS>;
 
+type PhasePromptArgs = {
+  phase: string;
+  prompts: typeof DEFAULT_PROMPTS;
+  reports: Record<string, string>;
+  scope?: string;
+  refinement?: string;
+};
+
 function createPhaseWorkflowHarness(options?: {
   selectChoice?: string;
+  selectChoices?: string[];
+  editorValue?: string;
+  editorValues?: string[];
   promptProvider?: () => TestPromptResult;
+  parseScopeArg?: (args: unknown) => string | undefined;
+  buildPrompt?: (args: PhasePromptArgs) => string;
 }) {
   const sentMessages: string[] = [];
   const notifications: Array<{ level: string; message: string }> = [];
+  const statusUpdates: Array<{ id: string; status: string | undefined }> = [];
+  const widgetUpdates: Array<{ id: string; widget: unknown }> = [];
+  const buildPromptCalls: PhasePromptArgs[] = [];
+  const selectChoices = [...(options?.selectChoices ?? [])];
+  const editorValues = [...(options?.editorValues ?? [])];
 
   const workflow = new PhaseWorkflow(
     {
@@ -131,8 +149,15 @@ function createPhaseWorkflowHarness(options?: {
         fixer: "Fixer",
       },
       promptProvider: options?.promptProvider ?? (() => ({ prompts: DEFAULT_PROMPTS })),
-      parseScopeArg: () => undefined,
-      buildPrompt: ({ phase }) => phase,
+      parseScopeArg: options?.parseScopeArg ?? (() => undefined),
+      buildPrompt: (args) => {
+        const snapshot: PhasePromptArgs = {
+          ...args,
+          reports: { ...args.reports },
+        };
+        buildPromptCalls.push(snapshot);
+        return options?.buildPrompt?.(snapshot) ?? args.phase;
+      },
       text: {
         unavailable: (error) => error?.message ?? "unavailable",
         alreadyRunning: "running",
@@ -156,18 +181,46 @@ function createPhaseWorkflowHarness(options?: {
       notify(message: string, level: string) {
         notifications.push({ message, level });
       },
-      setStatus() {},
-      setWidget() {},
+      setStatus(id: string, status: string | undefined) {
+        statusUpdates.push({ id, status });
+      },
+      setWidget(id: string, widget: unknown) {
+        widgetUpdates.push({ id, widget });
+      },
       async select() {
-        return options?.selectChoice ?? "cancel";
+        return selectChoices.shift() ?? options?.selectChoice ?? "cancel";
       },
       async editor() {
-        return "";
+        return editorValues.shift() ?? options?.editorValue ?? "";
       },
     },
   };
 
-  return { workflow, ctx: ctx as never, sentMessages, notifications };
+  return {
+    workflow,
+    ctx: ctx as never,
+    sentMessages,
+    notifications,
+    statusUpdates,
+    widgetUpdates,
+    buildPromptCalls,
+  };
+}
+
+function createAgentEndEvent(prompt: string, assistantText: string) {
+  return {
+    messages: [
+      { role: "user", content: [{ type: "text", text: prompt }] },
+      { role: "assistant", content: [{ type: "text", text: assistantText }] },
+    ],
+  };
+}
+
+function replaceRequestId(prompt: string, requestId: string): string {
+  return prompt.replace(
+    /<!--\s*workflow-request-id:[^>]+\s*-->/i,
+    `<!-- workflow-request-id:${requestId} -->`,
+  );
 }
 
 test("registerPhaseWorkflowExtension resolves prompts and wires workflow handlers", async () => {
@@ -293,6 +346,120 @@ test("PhaseWorkflow reports raw prompt-load failures", async () => {
   assert.equal(result.kind, "blocked");
   assert.equal(result.reason, "prompts_unavailable");
   assert.deepEqual(notifications.at(-1), { level: "error", message: "load-result-failure" });
+});
+
+test("PhaseWorkflow keeps request-id and prompt-body correlation unchanged", async () => {
+  const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness();
+
+  await workflow.handleCommand(undefined, ctx);
+  assert.equal(sentMessages.length, 1);
+
+  const wrongRequestResult = await workflow.handleAgentEnd(
+    createAgentEndEvent(replaceRequestId(sentMessages[0]!, "wf-test-999"), "finder-report"),
+    ctx,
+  );
+  assert.deepEqual(wrongRequestResult, { kind: "blocked", reason: "unmatched_agent_end" });
+  assert.equal(sentMessages.length, 1);
+
+  const wrongPromptResult = await workflow.handleAgentEnd(
+    createAgentEndEvent(sentMessages[0]!.replace("finder", "finder-modified"), "finder-report"),
+    ctx,
+  );
+  assert.deepEqual(wrongPromptResult, { kind: "blocked", reason: "unmatched_agent_end" });
+  assert.equal(sentMessages.length, 1);
+
+  const matchedResult = await workflow.handleAgentEnd(
+    createAgentEndEvent(sentMessages[0]!, "finder-report"),
+    ctx,
+  );
+  assert.deepEqual(matchedResult, { kind: "ok" });
+  assert.equal(sentMessages.length, 2);
+});
+
+test("PhaseWorkflow preserves analysis-to-execution prompt inputs", async () => {
+  const { workflow, ctx, sentMessages, buildPromptCalls } = createPhaseWorkflowHarness({
+    selectChoice: "execute",
+    parseScopeArg: parseTrimmedStringArg,
+    buildPrompt: ({ phase, reports, scope, refinement }) => {
+      return JSON.stringify({ phase, reports, scope, refinement });
+    },
+  });
+
+  await workflow.handleCommand("  src/app  ", ctx);
+  await workflow.handleAgentEnd(createAgentEndEvent(sentMessages[0]!, "finder-report"), ctx);
+  await workflow.handleAgentEnd(createAgentEndEvent(sentMessages[1]!, "arbiter-report"), ctx);
+
+  assert.equal(sentMessages.length, 3);
+  assert.deepEqual(buildPromptCalls, [
+    {
+      phase: "finder",
+      prompts: DEFAULT_PROMPTS,
+      reports: {},
+      scope: "src/app",
+      refinement: undefined,
+    },
+    {
+      phase: "arbiter",
+      prompts: DEFAULT_PROMPTS,
+      reports: { finder: "finder-report" },
+      scope: "src/app",
+      refinement: undefined,
+    },
+    {
+      phase: "fixer",
+      prompts: DEFAULT_PROMPTS,
+      reports: { finder: "finder-report", arbiter: "arbiter-report" },
+      scope: "src/app",
+      refinement: undefined,
+    },
+  ]);
+});
+
+test("PhaseWorkflow preserves the last-analysis refinement loop", async () => {
+  const { workflow, ctx, sentMessages, buildPromptCalls } = createPhaseWorkflowHarness({
+    selectChoices: ["refine", "execute"],
+    editorValue: "tighten validation",
+  });
+
+  await workflow.handleCommand(undefined, ctx);
+  await workflow.handleAgentEnd(createAgentEndEvent(sentMessages[0]!, "finder-report"), ctx);
+  await workflow.handleAgentEnd(createAgentEndEvent(sentMessages[1]!, "arbiter-initial"), ctx);
+  await workflow.handleAgentEnd(createAgentEndEvent(sentMessages[2]!, "arbiter-refined"), ctx);
+
+  assert.equal(sentMessages.length, 4);
+  assert.deepEqual(buildPromptCalls[2], {
+    phase: "arbiter",
+    prompts: DEFAULT_PROMPTS,
+    reports: { finder: "finder-report", arbiter: "arbiter-initial" },
+    scope: undefined,
+    refinement: "tighten validation",
+  });
+  assert.deepEqual(buildPromptCalls[3], {
+    phase: "fixer",
+    prompts: DEFAULT_PROMPTS,
+    reports: { finder: "finder-report", arbiter: "arbiter-refined" },
+    scope: undefined,
+    refinement: undefined,
+  });
+});
+
+test("PhaseWorkflow preserves execution completion cleanup", async () => {
+  const { workflow, ctx, sentMessages, notifications, statusUpdates, widgetUpdates } =
+    createPhaseWorkflowHarness({ selectChoice: "execute" });
+
+  await workflow.handleCommand(undefined, ctx);
+  await workflow.handleAgentEnd(createAgentEndEvent(sentMessages[0]!, "finder-report"), ctx);
+  await workflow.handleAgentEnd(createAgentEndEvent(sentMessages[1]!, "arbiter-report"), ctx);
+
+  const result = await workflow.handleAgentEnd(
+    createAgentEndEvent(sentMessages[2]!, "execution-complete"),
+    ctx,
+  );
+
+  assert.deepEqual(result, { kind: "ok" });
+  assert.deepEqual(notifications.at(-1), { level: "info", message: "complete" });
+  assert.deepEqual(statusUpdates.at(-1), { id: "wf-test", status: undefined });
+  assert.deepEqual(widgetUpdates.at(-1), { id: "wf-test", widget: undefined });
 });
 
 test("PhaseWorkflow handles invalid assistant payload with explicit error", async () => {
