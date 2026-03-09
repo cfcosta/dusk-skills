@@ -15,4 +15,9 @@ export type {
 export { PromptLoadError, loadPromptFiles } from "./prompt-loader";
 export type { PromptLoadResult } from "./prompt-loader";
 export { PhaseWorkflow } from "./phase-workflow";
-export type { PhaseWorkflowOptions, PromptSnapshot, WorkflowResult } from "./phase-workflow";
+export type {
+  PhaseWorkflowOptions,
+  PromptProviderResult,
+  PromptSnapshot,
+  WorkflowResult,
+} from "./phase-workflow";

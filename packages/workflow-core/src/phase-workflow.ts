@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "./extension-api";
 import { extractLastUserText, getLastAssistantTextResult } from "./message-content";
+import type { PromptLoadResult } from "./prompt-loader";
 
 type WorkflowResultKind = "ok" | "blocked" | "recoverable_error";
 
@@ -25,6 +26,8 @@ export interface PromptSnapshot<Prompts> {
   error?: Error;
 }
 
+export type PromptProviderResult<Prompts> = PromptSnapshot<Prompts> | PromptLoadResult<Prompts>;
+
 interface WorkflowText {
   unavailable: (error?: Error) => string;
   alreadyRunning: string;
@@ -46,7 +49,7 @@ export interface PhaseWorkflowOptions<Prompts> {
   analysisPhases: readonly string[];
   executionPhase: string;
   phaseLabels: Record<string, string>;
-  promptProvider: () => PromptSnapshot<Prompts>;
+  promptProvider: () => PromptProviderResult<Prompts>;
   parseScopeArg: (args: unknown) => string | undefined;
   buildPrompt: (args: {
     phase: string;
@@ -316,7 +319,7 @@ export class PhaseWorkflow<Prompts> {
   }
 
   private reloadPrompts() {
-    const loadResult = this.options.promptProvider();
+    const loadResult = normalizePromptProviderResult(this.options.promptProvider());
     this.prompts = loadResult.prompts;
     this.startupError = loadResult.error;
   }
@@ -382,6 +385,20 @@ export class PhaseWorkflow<Prompts> {
 
     return isDefaultMutatingToolName(toolName);
   }
+}
+
+function normalizePromptProviderResult<Prompts>(
+  result: PromptProviderResult<Prompts>,
+): PromptSnapshot<Prompts> {
+  if (!("ok" in result)) {
+    return result;
+  }
+
+  if (result.ok) {
+    return { prompts: result.prompts };
+  }
+
+  return { error: result.error };
 }
 
 function isDefaultMutatingToolName(toolName?: string): boolean {

@@ -5,9 +5,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   PhaseWorkflow,
+  PromptLoadError,
   getLastAssistantTextResult,
   loadPromptFiles,
   parseTrimmedStringArg,
+  type PromptLoadResult,
+  type PromptSnapshot,
 } from "./index";
 
 test("parseTrimmedStringArg trims strings and ignores non-strings", () => {
@@ -46,7 +49,20 @@ test("loadPromptFiles returns discriminated success/failure", () => {
   }
 });
 
-function createPhaseWorkflowHarness(options?: { selectChoice?: string }) {
+const DEFAULT_PROMPTS = {
+  finder: "F",
+  arbiter: "A",
+  fixer: "X",
+};
+
+type TestPromptResult =
+  | PromptSnapshot<typeof DEFAULT_PROMPTS>
+  | PromptLoadResult<typeof DEFAULT_PROMPTS>;
+
+function createPhaseWorkflowHarness(options?: {
+  selectChoice?: string;
+  promptProvider?: () => TestPromptResult;
+}) {
   const sentMessages: string[] = [];
   const notifications: Array<{ level: string; message: string }> = [];
 
@@ -65,11 +81,11 @@ function createPhaseWorkflowHarness(options?: { selectChoice?: string }) {
         arbiter: "Arbiter",
         fixer: "Fixer",
       },
-      promptProvider: () => ({ prompts: { finder: "F", arbiter: "A", fixer: "X" } }),
+      promptProvider: options?.promptProvider ?? (() => ({ prompts: DEFAULT_PROMPTS })),
       parseScopeArg: () => undefined,
       buildPrompt: ({ phase }) => phase,
       text: {
-        unavailable: () => "unavailable",
+        unavailable: (error) => error?.message ?? "unavailable",
         alreadyRunning: "running",
         analysisWriteBlocked: "blocked",
         complete: "complete",
@@ -104,6 +120,54 @@ function createPhaseWorkflowHarness(options?: { selectChoice?: string }) {
 
   return { workflow, ctx: ctx as never, sentMessages, notifications };
 }
+
+test("PhaseWorkflow accepts prompt snapshots with prompts", async () => {
+  const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness({
+    promptProvider: () => ({ prompts: DEFAULT_PROMPTS }),
+  });
+
+  const result = await workflow.handleCommand(undefined, ctx);
+
+  assert.equal(result.kind, "ok");
+  assert.equal(sentMessages.length, 1);
+});
+
+test("PhaseWorkflow reports snapshot prompt-provider errors", async () => {
+  const failure = new Error("snapshot-failure");
+  const { workflow, ctx, notifications } = createPhaseWorkflowHarness({
+    promptProvider: () => ({ error: failure }),
+  });
+
+  const result = await workflow.handleCommand(undefined, ctx);
+
+  assert.equal(result.kind, "blocked");
+  assert.equal(result.reason, "prompts_unavailable");
+  assert.deepEqual(notifications.at(-1), { level: "error", message: "snapshot-failure" });
+});
+
+test("PhaseWorkflow accepts raw prompt-load results with prompts", async () => {
+  const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness({
+    promptProvider: () => ({ ok: true, prompts: DEFAULT_PROMPTS }),
+  });
+
+  const result = await workflow.handleCommand(undefined, ctx);
+
+  assert.equal(result.kind, "ok");
+  assert.equal(sentMessages.length, 1);
+});
+
+test("PhaseWorkflow reports raw prompt-load failures", async () => {
+  const failure = new PromptLoadError("PROMPT_READ_FAILED", "load-result-failure");
+  const { workflow, ctx, notifications } = createPhaseWorkflowHarness({
+    promptProvider: () => ({ ok: false, error: failure }),
+  });
+
+  const result = await workflow.handleCommand(undefined, ctx);
+
+  assert.equal(result.kind, "blocked");
+  assert.equal(result.reason, "prompts_unavailable");
+  assert.deepEqual(notifications.at(-1), { level: "error", message: "load-result-failure" });
+});
 
 test("PhaseWorkflow handles invalid assistant payload with explicit error", async () => {
   const { workflow, ctx, sentMessages, notifications } = createPhaseWorkflowHarness();
