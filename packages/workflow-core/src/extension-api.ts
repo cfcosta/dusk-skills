@@ -1,26 +1,137 @@
 export type ThemeActivationResult = { success: true } | { success: false; error?: string };
 
+export interface ExtensionTheme {
+  fg(color: string, text: string): string;
+  strikethrough(text: string): string;
+}
+
+export interface ExtensionWidgetOptions {
+  placement?: "above_editor" | "below_editor";
+}
+
+export type ExtensionWidgetFactory = (
+  tui: unknown,
+  theme: ExtensionTheme,
+) => unknown | Promise<unknown>;
+
+export interface ExtensionUICustomOptions {
+  overlay?: boolean;
+  overlayOptions?: unknown | (() => unknown);
+  onHandle?: (handle: unknown) => void;
+}
+
+export type ExtensionUICustomFactory<T> = (
+  tui: unknown,
+  theme: ExtensionTheme,
+  keybindings: unknown,
+  done: (result: T) => void,
+) => unknown | Promise<unknown>;
+
+export interface ExtensionUIDialogOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 export interface ExtensionUI {
-  notify(message: string, level: "info" | "warning" | "error"): void;
+  theme: ExtensionTheme;
+  notify(message: string, level?: "info" | "warning" | "error"): void;
   setStatus(id: string, status: string | undefined): void;
-  setWidget(id: string, widget: string | undefined): void;
-  select(title: string, options: string[]): Promise<string | undefined>;
-  editor(label: string, initialValue: string): Promise<string | undefined>;
+  setWidget(
+    id: string,
+    widget: string[] | ExtensionWidgetFactory | undefined,
+    options?: ExtensionWidgetOptions,
+  ): void;
+  select(
+    title: string,
+    options: string[],
+    dialogOptions?: ExtensionUIDialogOptions,
+  ): Promise<string | undefined>;
+  editor(label: string, initialValue?: string): Promise<string | undefined>;
+  custom<T>(factory: ExtensionUICustomFactory<T>, options?: ExtensionUICustomOptions): Promise<T>;
   setTheme(themeName: string): ThemeActivationResult;
 }
 
 export interface ExtensionContext {
   ui: ExtensionUI;
+  hasUI: boolean;
+}
+
+export interface ExtensionCustomMessage<T = unknown> {
+  customType: string;
+  content?: unknown;
+  display?: boolean;
+  details?: T;
+}
+
+export interface SendMessageOptions {
+  triggerTurn?: boolean;
+  deliverAs?: "steer" | "followUp" | "nextTurn";
+}
+
+export interface SendUserMessageOptions {
+  deliverAs?: "steer" | "followUp";
+}
+
+export interface ToolInfo {
+  name: string;
+  description?: string;
+  parameters?: unknown;
+}
+
+export interface ToolCallEvent {
+  toolName?: string;
+  input?: unknown;
+}
+
+export interface AgentEndEvent {
+  messages?: unknown[];
+}
+
+export interface BeforeAgentStartEvent {
+  systemPrompt: string;
+  prompt?: string;
+  images?: unknown[];
+}
+
+export interface BeforeAgentStartResult {
+  systemPrompt?: string;
+  message?: ExtensionCustomMessage;
+}
+
+export interface TurnEndEvent {
+  message?: unknown;
+  toolResults?: unknown[];
+}
+
+export interface SessionStartEvent {
+  restored?: boolean;
+}
+
+export interface SessionShutdownEvent {
+  reason?: string;
+}
+
+export interface ExtensionEventMap {
+  tool_call: ToolCallEvent;
+  agent_end: AgentEndEvent;
+  before_agent_start: BeforeAgentStartEvent;
+  turn_end: TurnEndEvent;
+  session_start: SessionStartEvent;
+  session_shutdown: SessionShutdownEvent;
 }
 
 interface ExtensionEventContext {
-  tool_call: ExtensionContext | undefined;
-  agent_end: ExtensionContext | undefined;
+  tool_call: ExtensionContext;
+  agent_end: ExtensionContext;
+  before_agent_start: ExtensionContext;
+  turn_end: ExtensionContext;
   session_start: ExtensionContext;
+  session_shutdown: ExtensionContext;
 }
 
 export interface ExtensionAPI {
-  sendUserMessage(message: string): void;
+  sendMessage<T = unknown>(message: ExtensionCustomMessage<T>, options?: SendMessageOptions): void;
+  sendUserMessage(message: string | unknown[], options?: SendUserMessageOptions): void;
   registerCommand(
     name: string,
     command: {
@@ -28,8 +139,11 @@ export interface ExtensionAPI {
       handler: (args: unknown, ctx: ExtensionContext) => unknown;
     },
   ): void;
-  on<EventName extends keyof ExtensionEventContext>(
+  getActiveTools(): string[];
+  getAllTools(): ToolInfo[];
+  setActiveTools(toolNames: string[]): void;
+  on<EventName extends keyof ExtensionEventMap>(
     event: EventName,
-    handler: (event: unknown, ctx: ExtensionEventContext[EventName]) => unknown,
+    handler: (event: ExtensionEventMap[EventName], ctx: ExtensionEventContext[EventName]) => unknown,
   ): void;
 }
