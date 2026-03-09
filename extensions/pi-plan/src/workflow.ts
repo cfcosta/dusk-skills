@@ -423,12 +423,17 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   }
 
   async handleSessionStart(_event: SessionStartEvent, ctx: ExtensionContext): Promise<void> {
+    this.syncLocalLifecycleStateFromGuided();
     this.setStatus(ctx);
   }
 
   async handleSessionShutdown(_event: SessionShutdownEvent, ctx: ExtensionContext): Promise<void> {
+    if (this.planModeEnabled || this.restoreTools) {
+      this.restoreNormalTools();
+    }
+
     await super.handleSessionShutdown(_event, ctx);
-    this.resetExecutionState();
+    this.resetLocalLifecycleState();
     if (ctx.hasUI) {
       ctx.ui.setStatus(STATUS_KEY, undefined);
       ctx.ui.setWidget(TODO_WIDGET_KEY, undefined);
@@ -598,6 +603,29 @@ export class PiPlanWorkflow extends GuidedWorkflow {
 
     const latestPlanText = this.getLatestPlanText();
     return latestPlanText ? extractTodoItems(latestPlanText) : [];
+  }
+
+  private syncLocalLifecycleStateFromGuided(): void {
+    const state = this.getStateSnapshot();
+    const execution = this.getExecutionSnapshot();
+
+    this.planModeEnabled = state.phase === "planning" || state.phase === "approval";
+    this.executionMode = state.phase === "executing" && execution.items.length > 0;
+    this.executionConstraintNote = execution.note ?? "";
+    this.todoItems = execution.items.map((item) => ({
+      step: item.step,
+      text: item.text,
+      completed: item.completed,
+    }));
+    this.latestPlanDraft = this.getLatestPlanText() ?? "";
+  }
+
+  private resetLocalLifecycleState(): void {
+    this.planModeEnabled = false;
+    this.restoreTools = null;
+    this.todoItems = [];
+    this.resetExecutionState();
+    this.resetPlanningDraft();
   }
 
   private getAllToolNames(): string[] {

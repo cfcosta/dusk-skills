@@ -762,6 +762,73 @@ test("exit selection restores normal tools and clears tracked progress", async (
   });
 });
 
+test("session shutdown restores tools and clears stale plan-mode status", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "on");
+  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
+  expect(harness.uiStub.statuses.get("pi-plan")).toBe("⏸ plan");
+
+  await harness.emit("session_shutdown", { reason: "exit" });
+
+  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
+  expect(harness.uiStub.statuses.get("pi-plan")).toBeUndefined();
+  expect(harness.uiStub.widgets.get("pi-plan-todos")).toBeUndefined();
+
+  await harness.emit("session_start", { restored: true });
+  expect(harness.uiStub.statuses.get("pi-plan")).toBeUndefined();
+
+  await harness.runCommand("plan", "status");
+  expect(harness.uiStub.notifications).toContainEqual({
+    message: "Plan mode: OFF (default YOLO mode)",
+    level: "info",
+  });
+});
+
+test("session shutdown clears guided execution lifecycle state", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "approve" },
+  });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
+
+  expect(harness.uiStub.statuses.get("pi-plan")).toBe("📋 0/2");
+
+  await harness.emit("session_shutdown", { reason: "exit" });
+
+  expect(harness.uiStub.statuses.get("pi-plan")).toBeUndefined();
+  expect(harness.uiStub.widgets.get("pi-plan-todos")).toBeUndefined();
+
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications).toContainEqual({
+    message: "No tracked plan steps. Create a plan in /plan mode first.",
+    level: "info",
+  });
+
+  const beforeAgentStart = harness.eventHandlers.get("before_agent_start")?.[0];
+  expect(beforeAgentStart).toBeTruthy();
+  const result = await beforeAgentStart?.({ systemPrompt: "base" }, harness.ctx);
+  expect(String((result as { systemPrompt?: string })?.systemPrompt ?? "")).toContain(
+    "[DEFAULT MODE: YOLO]",
+  );
+  expect(String((result as { systemPrompt?: string })?.systemPrompt ?? "")).not.toContain(
+    "[APPROVED PLAN EXECUTION]",
+  );
+});
+
 test("regenerate selection clears tracked todos before sending a refresh prompt", async () => {
   const harness = createPlanExtensionHarness({
     hasUI: true,
