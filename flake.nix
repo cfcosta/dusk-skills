@@ -11,10 +11,6 @@
       url = "github:Leonxlnx/taste-skill";
       flake = false;
     };
-    skill-humanizer = {
-      url = "github:blader/humanizer";
-      flake = false;
-    };
     skill-visual-explainer = {
       url = "github:nicobailon/visual-explainer";
       flake = false;
@@ -124,7 +120,7 @@
               cp -rf ${./skills}/rust-proptest $out/skills/rust-proptest
 
               mkdir -p $out/skills/humanizer
-              cp -rf ${inputs.skill-humanizer}/* $out/skills/humanizer/
+              cp -rf ${./skills}/humanizer/* $out/skills/humanizer/
 
               mkdir -p $out/skills/visual-explainer
               cp -rf ${inputs.skill-visual-explainer}/* $out/skills/visual-explainer/

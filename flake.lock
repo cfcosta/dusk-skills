@@ -158,7 +158,6 @@
         "nixpkgs": "nixpkgs",
         "playwright-cli": "playwright-cli",
         "skill-design-taste-frontend": "skill-design-taste-frontend",
-        "skill-humanizer": "skill-humanizer",
         "skill-visual-explainer": "skill-visual-explainer",
         "skillset-openai": "skillset-openai"
       }
@@ -176,22 +175,6 @@
       "original": {
         "owner": "Leonxlnx",
         "repo": "taste-skill",
-        "type": "github"
-      }
-    },
-    "skill-humanizer": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1771649890,
-        "narHash": "sha256-kvYNWZKebKcvNAoqwgsnFFQqpTUpZEYFcEuleH6IAuc=",
-        "owner": "blader",
-        "repo": "humanizer",
-        "rev": "d8085c7da5ddb9a179572837d4806b68cde3e9ff",
-        "type": "github"
-      },
-      "original": {
-        "owner": "blader",
-        "repo": "humanizer",
         "type": "github"
       }
     },
