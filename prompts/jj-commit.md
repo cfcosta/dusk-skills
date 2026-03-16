@@ -5,9 +5,12 @@ Please **land the plane**:
    - For Python projects, it is `ty` and `ruff`.
    - For Rust projects, it is `cargo clippy --all --all-targets` and `cargo fmt`.
    - If inside a project with Nix, run it using `nix develop`.
+   - If the `formatter` is available inside the nix flake, use `nix fmt`.
 
 2. Create a `jujutsu` commit with `jj commit <changed paths> -m <message>`.
    - Use the `Conventional Commits` format for your commits.
    - Beyond a proper commit title, add a detailed description, explaining what
      changed, why and what is the main goal being pursued.
    - This project does not use Git directly, so only commit with `jj` and not `git`.
+   - Do not complain about changes you didn't made, assume they are from another agent and can be ignored.
+   - Do not check `jj log` after committing. If the `jj commit` succeeds, it will be there.
