@@ -315,7 +315,10 @@ test("owaspFix command wiring uses real prompt files end-to-end", async () => {
   owaspFix(api as never);
 
   await commands["owasp-fix"]?.handler("", ctx as never);
-  assert.match(sentMessages[0] ?? "", /You are a security-finding agent focused on OWASP Top 10 risks/);
+  assert.match(
+    sentMessages[0] ?? "",
+    /You are a security-finding agent focused on OWASP Top 10 risks/,
+  );
 
   await listeners.agent_end?.(
     { messages: [{ role: "assistant", content: [{ type: "text", text: "finder-report" }] }] },

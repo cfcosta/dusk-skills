@@ -144,6 +144,9 @@ export interface ExtensionAPI {
   setActiveTools(toolNames: string[]): void;
   on<EventName extends keyof ExtensionEventMap>(
     event: EventName,
-    handler: (event: ExtensionEventMap[EventName], ctx: ExtensionEventContext[EventName]) => unknown,
+    handler: (
+      event: ExtensionEventMap[EventName],
+      ctx: ExtensionEventContext[EventName],
+    ) => unknown,
   ): void;
 }

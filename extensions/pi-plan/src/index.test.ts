@@ -414,7 +414,12 @@ test("hidden critique responses ignore unmatched agent_end payloads", async () =
         },
         {
           role: "assistant",
-          content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready" }],
+          content: [
+            {
+              type: "text",
+              text: "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+            },
+          ],
         },
       ],
     },
@@ -600,7 +605,9 @@ test("continue selection sends a correlated planning follow-up and keeps read-on
 
   expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
   expect(harness.sentUserMessages).toHaveLength(1);
-  expect(harness.sentUserMessages[0]).toContain("Continue planning from the proposed plan. User note: split step two.");
+  expect(harness.sentUserMessages[0]).toContain(
+    "Continue planning from the proposed plan. User note: split step two.",
+  );
   expect(extractRequestId(harness.sentUserMessages[0] ?? "")).toBeTruthy();
 });
 
@@ -668,7 +675,9 @@ test("execution DONE markers advance to the next guided step", async () => {
   });
 
   expect(harness.sentUserMessages).toHaveLength(2);
-  expect(harness.sentUserMessages[1]).toContain("Complete only step 2: Approval action UI to show a compact summary");
+  expect(harness.sentUserMessages[1]).toContain(
+    "Complete only step 2: Approval action UI to show a compact summary",
+  );
   expect(harness.uiStub.statuses.get("pi-plan")).toBe("📋 1/2");
   expect(harness.uiStub.widgets.get("pi-plan-todos")).toEqual([
     "☑ A regression test for prompt leakage",

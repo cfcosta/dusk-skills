@@ -4,10 +4,10 @@ Shared runtime package for the workflow extensions bundled in this repo.
 
 This package exists so the extension logic that really is shared stays shared. It now exposes two orchestration styles because `duskpi` ships two different workflow families.
 
-| Runtime | Used by | Best fit |
-| --- | --- | --- |
-| `PhaseWorkflow` | `/bug-fix`, `/owasp-fix`, `/test-audit`, `/refactor` | fixed multi-phase analysis, skepticism, arbitration, and execution flows |
-| `GuidedWorkflow` | vendored `/plan` in `extensions/pi-plan` | read-only planning, hidden critique/revision turns, approval callbacks, and step-by-step execution |
+| Runtime          | Used by                                              | Best fit                                                                                           |
+| ---------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `PhaseWorkflow`  | `/bug-fix`, `/owasp-fix`, `/test-audit`, `/refactor` | fixed multi-phase analysis, skepticism, arbitration, and execution flows                           |
+| `GuidedWorkflow` | vendored `/plan` in `extensions/pi-plan`             | read-only planning, hidden critique/revision turns, approval callbacks, and step-by-step execution |
 
 ## Main exports
 

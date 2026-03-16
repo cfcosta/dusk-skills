@@ -129,9 +129,23 @@ function createCritiqueOptions() {
 }
 
 function createApprovalOptions(options?: {
-  selection?: { cancelled?: boolean; action?: "approve" | "continue" | "regenerate" | "exit"; note?: string };
-  onApprove?: (args: { goal?: string; planText: string; critiqueText?: string; note?: string }) => void;
-  onExit?: (args: { goal?: string; planText: string; critiqueText?: string; note?: string }) => void;
+  selection?: {
+    cancelled?: boolean;
+    action?: "approve" | "continue" | "regenerate" | "exit";
+    note?: string;
+  };
+  onApprove?: (args: {
+    goal?: string;
+    planText: string;
+    critiqueText?: string;
+    note?: string;
+  }) => void;
+  onExit?: (args: {
+    goal?: string;
+    planText: string;
+    critiqueText?: string;
+    note?: string;
+  }) => void;
 }) {
   const selectCalls: Array<{ planText: string; critiqueText?: string }> = [];
 
@@ -170,10 +184,7 @@ function createExecutionOptions() {
           { step: 2, text: "Second task" },
         ];
       },
-      buildExecutionPrompt(args: {
-        currentStep: { step: number; text: string };
-        note?: string;
-      }) {
+      buildExecutionPrompt(args: { currentStep: { step: number; text: string }; note?: string }) {
         return `Execute step ${args.currentStep.step}: ${args.currentStep.text}${args.note ? ` (${args.note})` : ""}`;
       },
     },
@@ -258,7 +269,9 @@ test("GuidedWorkflow ignores unmatched agent_end payloads while awaiting the act
       messages: [
         {
           role: "user",
-          content: [{ type: "text", text: "plan prompt\n\n<!-- workflow-request-id:guided-test-99 -->" }],
+          content: [
+            { type: "text", text: "plan prompt\n\n<!-- workflow-request-id:guided-test-99 -->" },
+          ],
         },
         {
           role: "assistant",
@@ -569,16 +582,21 @@ test("GuidedWorkflow opens the approval callback only after critique PASS", asyn
     {
       messages: [
         { role: "custom", content: String(sentCustomMessages[0]?.content) },
-        { role: "assistant", content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }] },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }],
+        },
       ],
     },
     ctx,
   );
 
-  assert.deepEqual(selectCalls, [{
-    planText: "draft plan",
-    critiqueText: "1) Verdict: PASS\n2) Issues:\n- none",
-  }]);
+  assert.deepEqual(selectCalls, [
+    {
+      planText: "draft plan",
+      critiqueText: "1) Verdict: PASS\n2) Issues:\n- none",
+    },
+  ]);
   assert.deepEqual(workflow.getStateSnapshot(), {
     phase: "approval",
     goal: "first run",
@@ -616,7 +634,10 @@ test("GuidedWorkflow dispatches continue actions back into planning", async () =
     {
       messages: [
         { role: "custom", content: String(sentCustomMessages[0]?.content) },
-        { role: "assistant", content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }] },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }],
+        },
       ],
     },
     ctx,
@@ -665,7 +686,10 @@ test("GuidedWorkflow dispatches regenerate actions into a fresh planning round",
     {
       messages: [
         { role: "custom", content: String(sentCustomMessages[0]?.content) },
-        { role: "assistant", content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }] },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }],
+        },
       ],
     },
     ctx,
@@ -737,19 +761,24 @@ test("GuidedWorkflow transitions into execution-ready state on approve", async (
     {
       messages: [
         { role: "custom", content: String(sentCustomMessages[0]?.content) },
-        { role: "assistant", content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }] },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }],
+        },
       ],
     },
     ctx,
   );
 
   assert.deepEqual(result, { kind: "ok" });
-  assert.deepEqual(approved, [{
-    goal: "first run",
-    planText: "draft plan",
-    critiqueText: "1) Verdict: PASS\n2) Issues:\n- none",
-    note: "ship it",
-  }]);
+  assert.deepEqual(approved, [
+    {
+      goal: "first run",
+      planText: "draft plan",
+      critiqueText: "1) Verdict: PASS\n2) Issues:\n- none",
+      note: "ship it",
+    },
+  ]);
   assert.deepEqual(workflow.getStateSnapshot(), {
     phase: "executing",
     goal: "first run",
@@ -791,19 +820,24 @@ test("GuidedWorkflow clears the active run on exit", async () => {
     {
       messages: [
         { role: "custom", content: String(sentCustomMessages[0]?.content) },
-        { role: "assistant", content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }] },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "1) Verdict: PASS\n2) Issues:\n- none" }],
+        },
       ],
     },
     ctx,
   );
 
   assert.deepEqual(result, { kind: "ok" });
-  assert.deepEqual(exited, [{
-    goal: "first run",
-    planText: "draft plan",
-    critiqueText: "1) Verdict: PASS\n2) Issues:\n- none",
-    note: "stop",
-  }]);
+  assert.deepEqual(exited, [
+    {
+      goal: "first run",
+      planText: "draft plan",
+      critiqueText: "1) Verdict: PASS\n2) Issues:\n- none",
+      note: "stop",
+    },
+  ]);
   assert.deepEqual(workflow.getStateSnapshot(), {
     phase: "idle",
     goal: undefined,

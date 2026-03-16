@@ -323,10 +323,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     this.syncExecutionShadowFromGuided(beforeState.phase, beforeExecution, ctx);
   }
 
-  async handleAgentEnd(
-    event: AgentEndEvent,
-    ctx: ExtensionContext,
-  ): Promise<GuidedWorkflowResult> {
+  async handleAgentEnd(event: AgentEndEvent, ctx: ExtensionContext): Promise<GuidedWorkflowResult> {
     const messages = event.messages ?? [];
     const lastAssistantText = [...messages]
       .reverse()
@@ -367,12 +364,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
 
         const captured = this.capturePlanDraft(lastAssistantText, ctx);
         if (captured) {
-          notify(
-            this.pi,
-            ctx,
-            "Reviewing the plan with a critique pass before approval.",
-            "info",
-          );
+          notify(this.pi, ctx, "Reviewing the plan with a critique pass before approval.", "info");
         }
 
         const beforeExecution = this.getExecutionSnapshot();
@@ -459,10 +451,14 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   private async selectApprovalAction(
     args: { planText: string; critiqueText?: string; note?: string },
     ctx: ExtensionContext,
-  ): Promise<{ cancelled?: boolean; action?: "approve" | "continue" | "regenerate" | "exit"; note?: string }> {
+  ): Promise<{
+    cancelled?: boolean;
+    action?: "approve" | "continue" | "regenerate" | "exit";
+    note?: string;
+  }> {
     this.latestPlanDraft = args.planText;
     this.latestCritiqueSummary = args.critiqueText
-      ? extractCritiqueSummary(args.critiqueText) ?? "ready"
+      ? (extractCritiqueSummary(args.critiqueText) ?? "ready")
       : this.latestCritiqueSummary;
     this.approvalReview = buildApprovalReviewState(args.planText, this.todoItems, {
       critiqueSummary: this.latestCritiqueSummary || undefined,
@@ -584,7 +580,9 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return "revision";
     }
 
-    if (promptText.includes("Critique the latest proposed implementation plan for execution quality.")) {
+    if (
+      promptText.includes("Critique the latest proposed implementation plan for execution quality.")
+    ) {
       return "critique";
     }
 
@@ -673,10 +671,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       .join("\n");
   }
 
-  private buildExecutionPrompt(
-    currentStep: GuidedWorkflowExecutionItem,
-    note?: string,
-  ): string {
+  private buildExecutionPrompt(currentStep: GuidedWorkflowExecutionItem, note?: string): string {
     return [
       EXECUTION_TRIGGER_PROMPT,
       `Complete only step ${currentStep.step}: ${currentStep.text}`,
@@ -873,12 +868,12 @@ function getAssistantTextFromMessage(message: unknown): string {
   return extractMessageText(candidate.content) ?? "";
 }
 
-function extractLastPrompt(
-  messages: unknown[],
-): { role?: unknown; content?: unknown } | undefined {
-  const typedMessages = messages.filter((message): message is { role?: unknown; content?: unknown } => {
-    return typeof message === "object" && message !== null;
-  });
+function extractLastPrompt(messages: unknown[]): { role?: unknown; content?: unknown } | undefined {
+  const typedMessages = messages.filter(
+    (message): message is { role?: unknown; content?: unknown } => {
+      return typeof message === "object" && message !== null;
+    },
+  );
 
   return [...typedMessages].reverse().find((message) => {
     return message.role === "user" || message.role === "custom";

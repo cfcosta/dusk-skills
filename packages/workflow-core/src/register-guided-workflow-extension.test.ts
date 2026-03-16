@@ -112,7 +112,10 @@ test("registerGuidedWorkflowExtension wires guided workflow handlers", async () 
   api.setActiveTools(["read"]);
 
   assert.deepEqual(api.getActiveTools(), ["read"]);
-  assert.deepEqual(api.getAllTools().map((tool) => tool.name), ["read", "bash"]);
+  assert.deepEqual(
+    api.getAllTools().map((tool) => tool.name),
+    ["read", "bash"],
+  );
   assert.deepEqual(sentCustomMessages, [
     { customType: "guided-status", optionsDeliverAs: "followUp" },
   ]);
@@ -178,16 +181,10 @@ test("registerGuidedWorkflowExtension wires guided workflow handlers", async () 
     "tool-result",
   );
   assert.equal(listeners.agent_end?.({ messages: ["report"] }, ctx), "agent-end-result");
-  assert.deepEqual(
-    listeners.before_agent_start?.({ systemPrompt: "base" }, ctx),
-    beforeResult,
-  );
+  assert.deepEqual(listeners.before_agent_start?.({ systemPrompt: "base" }, ctx), beforeResult);
   assert.equal(listeners.turn_end?.({ message: { role: "assistant" } }, ctx), "turn-end-result");
   assert.equal(listeners.session_start?.({ restored: true }, ctx), "session-start-result");
-  assert.equal(
-    listeners.session_shutdown?.({ reason: "exit" }, ctx),
-    "session-shutdown-result",
-  );
+  assert.equal(listeners.session_shutdown?.({ reason: "exit" }, ctx), "session-shutdown-result");
 
   assert.deepEqual(forwarded, [
     { type: "command", payload: "scope", ctx },

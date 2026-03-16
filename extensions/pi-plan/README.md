@@ -94,10 +94,10 @@ Choosing **Approve and execute now** automatically:
 
 ## Modes
 
-| Mode | Behavior | Safety policy |
-| --- | --- | --- |
-| Default (YOLO) | Executes directly unless you explicitly request planning | No extra restrictions |
-| Plan (`/plan`) | Gathers evidence and returns an execution plan | Read-only tools plus mutating action blocks |
+| Mode           | Behavior                                                 | Safety policy                               |
+| -------------- | -------------------------------------------------------- | ------------------------------------------- |
+| Default (YOLO) | Executes directly unless you explicitly request planning | No extra restrictions                       |
+| Plan (`/plan`) | Gathers evidence and returns an execution plan           | Read-only tools plus mutating action blocks |
 
 ## Plan-mode guardrails
 

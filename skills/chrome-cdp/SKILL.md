@@ -38,16 +38,17 @@ Enable remote debugging in a Chromium-based browser first.
 
 ### Common setups
 
-| Browser | How to enable | Default port |
-| --- | --- | --- |
-| **Chrome** | Toggle at `chrome://inspect/#remote-debugging` | 9222 |
-| **Chromium** | Launch with `--remote-debugging-port=9226` or enable remote debugging in its inspect page if available | 9226 |
-| **Brave** | Launch with `--remote-debugging-port=9224` | 9224 |
-| **Edge** | Launch with `--remote-debugging-port=9225` | 9225 |
-| **Arc** | Launch with `--remote-debugging-port=9227` | 9227 |
-| **Dia** | Launch with `--remote-debugging-port=9223` | 9223 |
+| Browser      | How to enable                                                                                          | Default port |
+| ------------ | ------------------------------------------------------------------------------------------------------ | ------------ |
+| **Chrome**   | Toggle at `chrome://inspect/#remote-debugging`                                                         | 9222         |
+| **Chromium** | Launch with `--remote-debugging-port=9226` or enable remote debugging in its inspect page if available | 9226         |
+| **Brave**    | Launch with `--remote-debugging-port=9224`                                                             | 9224         |
+| **Edge**     | Launch with `--remote-debugging-port=9225`                                                             | 9225         |
+| **Arc**      | Launch with `--remote-debugging-port=9227`                                                             | 9227         |
+| **Dia**      | Launch with `--remote-debugging-port=9223`                                                             | 9223         |
 
 Notes:
+
 - Chrome's inspect-page toggle is preferred for the user's real profile.
 - Chrome may show an "Allow remote debugging" prompt the first time the master daemon connects.
 - Other Chromium-based browsers launched with `--remote-debugging-port` typically do not show that popup.
@@ -75,6 +76,7 @@ export CDPCLI="##CHROME-CDP##"
 A master daemon is created per browser port.
 
 That means:
+
 - Chrome's "Allow debugging" prompt should fire once per browser session, not once per tab
 - multiple commands can reuse the same browser connection
 - multiple agents can connect to the same master daemon socket

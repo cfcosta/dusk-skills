@@ -76,9 +76,7 @@ export interface GuidedWorkflowApprovalOptions {
   selectAction: (
     args: Omit<GuidedWorkflowApprovalPromptArgs, "note">,
     ctx: ExtensionContext,
-  ) =>
-    | GuidedWorkflowApprovalSelection
-    | Promise<GuidedWorkflowApprovalSelection>;
+  ) => GuidedWorkflowApprovalSelection | Promise<GuidedWorkflowApprovalSelection>;
   buildContinuePrompt?: (args: GuidedWorkflowApprovalPromptArgs) => string;
   buildRegeneratePrompt?: (args: GuidedWorkflowApprovalPromptArgs) => string;
   onApprove?: (args: GuidedWorkflowApprovalPromptArgs, ctx: ExtensionContext) => unknown;
@@ -214,10 +212,7 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     }
   }
 
-  async handleAgentEnd(
-    event: AgentEndEvent,
-    ctx: ExtensionContext,
-  ): Promise<GuidedWorkflowResult> {
+  async handleAgentEnd(event: AgentEndEvent, ctx: ExtensionContext): Promise<GuidedWorkflowResult> {
     if (this.state.phase === "idle") {
       return { kind: "blocked", reason: "inactive" };
     }
@@ -295,18 +290,12 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     return undefined;
   }
 
-  async handleSessionShutdown(
-    _event: SessionShutdownEvent,
-    _ctx: ExtensionContext,
-  ): Promise<void> {
+  async handleSessionShutdown(_event: SessionShutdownEvent, _ctx: ExtensionContext): Promise<void> {
     this.resetWorkflowState();
     return undefined;
   }
 
-  protected beginCritiqueFlow(
-    planText: string,
-    ctx: ExtensionContext,
-  ): GuidedWorkflowResult {
+  protected beginCritiqueFlow(planText: string, ctx: ExtensionContext): GuidedWorkflowResult {
     this.latestPlanText = planText;
     this.latestCritiqueText = undefined;
     if (this.options.critique) {
@@ -578,7 +567,8 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     text: string,
     currentStepNumber?: number,
   ): { completedCount: number; currentStepCompleted: boolean } {
-    const doneSteps = this.options.execution?.extractDoneStepNumbers?.(text) ?? extractDoneStepNumbers(text);
+    const doneSteps =
+      this.options.execution?.extractDoneStepNumbers?.(text) ?? extractDoneStepNumbers(text);
     let completedCount = 0;
     let currentStepCompleted = false;
 
@@ -644,9 +634,11 @@ function extractRequestId(message: string): string | undefined {
 }
 
 function extractLastPromptText(messages: unknown[]): string | undefined {
-  const typedMessages = messages.filter((message): message is { role?: unknown; content?: unknown } => {
-    return typeof message === "object" && message !== null;
-  });
+  const typedMessages = messages.filter(
+    (message): message is { role?: unknown; content?: unknown } => {
+      return typeof message === "object" && message !== null;
+    },
+  );
 
   const message = [...typedMessages].reverse().find((entry) => {
     return entry.role === "user" || entry.role === "custom";
