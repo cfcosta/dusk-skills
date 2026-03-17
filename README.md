@@ -163,6 +163,8 @@ Use it when you want to:
 
 The side answer is tool-less by design and is intended to feel lightweight and disposable.
 
+![Screenshot of the `/btw` side-question overlay while the main task keeps running](resources/btw.png)
+
 ### 4. Use prompt templates for recurring tasks
 
 The distribution ships prompt templates that expand into reusable workflows.
