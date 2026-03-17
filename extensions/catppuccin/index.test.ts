@@ -15,7 +15,7 @@ test("themeDefault registers session_start and activates configured theme", asyn
   const notifications: Array<{ message: string; level: string }> = [];
 
   fs.existsSync = ((path) => {
-    if (String(path).includes("extensions/pi-catppuccin/package.json")) {
+    if (String(path).includes("extensions/catppuccin/package.json")) {
       return true;
     }
 
@@ -23,7 +23,7 @@ test("themeDefault registers session_start and activates configured theme", asyn
   }) as typeof fs.existsSync;
 
   fs.readFileSync = ((path, options?) => {
-    if (String(path).includes("extensions/pi-catppuccin/package.json")) {
+    if (String(path).includes("extensions/catppuccin/package.json")) {
       return '{"pi":{"theme":"catppuccin-mocha"}}';
     }
 
@@ -70,7 +70,7 @@ test("themeDefault does nothing when no configured theme is discovered", async (
   const activatedThemes: string[] = [];
 
   fs.existsSync = ((path) => {
-    if (String(path).includes("extensions/pi-catppuccin/package.json")) {
+    if (String(path).includes("extensions/catppuccin/package.json")) {
       return true;
     }
 
@@ -78,8 +78,8 @@ test("themeDefault does nothing when no configured theme is discovered", async (
   }) as typeof fs.existsSync;
 
   fs.readFileSync = ((path, options?) => {
-    if (String(path).includes("extensions/pi-catppuccin/package.json")) {
-      return '{"name":"@duskpi/pi-catppuccin"}';
+    if (String(path).includes("extensions/catppuccin/package.json")) {
+      return '{"name":"@duskpi/catppuccin"}';
     }
 
     return originalReadFileSync(path, options as never);
@@ -122,7 +122,7 @@ test("themeDefault notifies when theme activation fails", async () => {
   const notifications: Array<{ message: string; level: string }> = [];
 
   fs.existsSync = ((path) => {
-    if (String(path).includes("extensions/pi-catppuccin/package.json")) {
+    if (String(path).includes("extensions/catppuccin/package.json")) {
       return true;
     }
 
@@ -130,7 +130,7 @@ test("themeDefault notifies when theme activation fails", async () => {
   }) as typeof fs.existsSync;
 
   fs.readFileSync = ((path, options?) => {
-    if (String(path).includes("extensions/pi-catppuccin/package.json")) {
+    if (String(path).includes("extensions/catppuccin/package.json")) {
       return '{"pi":{"theme":"catppuccin-mocha"}}';
     }
 

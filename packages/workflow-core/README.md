@@ -7,7 +7,7 @@ This package exists so the extension logic that really is shared stays shared. I
 | Runtime          | Used by                                              | Best fit                                                                                           |
 | ---------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `PhaseWorkflow`  | `/bug-fix`, `/owasp-fix`, `/test-audit`, `/refactor` | fixed multi-phase analysis, skepticism, arbitration, and execution flows                           |
-| `GuidedWorkflow` | vendored `/plan` in `extensions/pi-plan`             | read-only planning, hidden critique/revision turns, approval callbacks, and step-by-step execution |
+| `GuidedWorkflow` | vendored `/plan` in `extensions/plan`             | read-only planning, hidden critique/revision turns, approval callbacks, and step-by-step execution |
 
 ## Main exports
 
@@ -46,11 +46,11 @@ Current shared capabilities:
 
 Current repo consumer:
 
-- `extensions/pi-plan`
+- `extensions/plan`
 
 ## Design boundary
 
-`GuidedWorkflow` was added alongside `PhaseWorkflow`, not as a replacement for it. The phase-based extensions stay on the existing runtime. `pi-plan` uses the guided runtime because it needs hidden turns, approval state, execution tracking, and session lifecycle hooks that do not fit the older fixed-phase model.
+`GuidedWorkflow` was added alongside `PhaseWorkflow`, not as a replacement for it. The phase-based extensions stay on the existing runtime. `plan` uses the guided runtime because it needs hidden turns, approval state, execution tracking, and session lifecycle hooks that do not fit the older fixed-phase model.
 
 ## Validation
 

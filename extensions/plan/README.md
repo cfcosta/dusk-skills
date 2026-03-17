@@ -1,8 +1,8 @@
-# pi-plan extension
+# plan extension
 
 Vendored planning extension used by `duskpi`.
 
-This directory is the repo-local copy bundled under `extensions/pi-plan`. It is not treated as a standalone npm or git package in this repo, so upstream install and release instructions do not apply here.
+This directory is the repo-local copy bundled under `extensions/plan`. It is not treated as a standalone npm or git package in this repo, so upstream install and release instructions do not apply here.
 
 ## What it adds
 
@@ -23,7 +23,7 @@ This directory is the repo-local copy bundled under `extensions/pi-plan`. It is 
 
 Sometimes you want speed. Sometimes you want a review point before the first edit.
 
-`pi-plan` gives you both:
+`plan` gives you both:
 
 - default workflows stay fast because normal mode still executes directly
 - planning mode stays read-only until you approve execution
@@ -32,16 +32,16 @@ Sometimes you want speed. Sometimes you want a review point before the first edi
 
 ## Repo architecture
 
-In `duskpi`, `pi-plan` is the repo's `GuidedWorkflow` consumer.
+In `duskpi`, `plan` is the repo's `GuidedWorkflow` consumer.
 
 - `src/index.ts` is a thin bootstrap that registers the guided workflow extension and the separate `/todos` command.
 - `src/workflow.ts` defines `PiPlanWorkflow`, which configures the shared guided lifecycle for planning, critique, approval, execution, status rendering, and session cleanup.
 - `packages/workflow-core/src/guided-workflow.ts` owns the shared state for request correlation, hidden follow-up turns, execution tracking, and lifecycle reset.
-- Local `pi-plan` code still owns plan-specific prompts, plan-mode tool switching, the inline approval UI, and user-facing notifications.
+- Local `plan` code still owns plan-specific prompts, plan-mode tool switching, the inline approval UI, and user-facing notifications.
 
 ## Repo-local usage
 
-`pi-plan` is bundled by this repository and loaded through the `duskpi` package configuration.
+`plan` is bundled by this repository and loaded through the `duskpi` package configuration.
 
 For local development from this folder:
 

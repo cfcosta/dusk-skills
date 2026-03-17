@@ -20,8 +20,8 @@ import {
   type TodoItem,
 } from "./utils";
 
-const STATUS_KEY = "pi-plan";
-const TODO_WIDGET_KEY = "pi-plan-todos";
+const STATUS_KEY = "plan";
+const TODO_WIDGET_KEY = "plan-todos";
 
 const PLAN_TOOL_CANDIDATES = [
   "read",
@@ -167,7 +167,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
           ].join("\n");
         },
         parseCritiqueVerdict,
-        customMessageType: "pi-plan-internal",
+        customMessageType: "plan-internal",
       },
       approval: {
         async selectAction(args, ctx) {
@@ -445,7 +445,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   }
 
   private async resetPlanningRequestState(ctx: ExtensionContext): Promise<void> {
-    await super.handleSessionShutdown({ reason: "pi-plan-consumed-planning-response" }, ctx);
+    await super.handleSessionShutdown({ reason: "plan-consumed-planning-response" }, ctx);
   }
 
   private async selectApprovalAction(

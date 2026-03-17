@@ -288,7 +288,7 @@ test("correlated /plan requests ignore unmatched agent_end payloads", async () =
           content: [
             {
               type: "text",
-              text: requestPrompt.replace(requestId ?? "", "pi-plan-999"),
+              text: requestPrompt.replace(requestId ?? "", "plan-999"),
             },
           ],
         },
@@ -326,7 +326,7 @@ test("correlated /plan requests still route matched responses into critique", as
 
   expect(harness.sentMessages).toHaveLength(1);
   expect(harness.sentMessages[0]).toMatchObject({
-    customType: "pi-plan-internal",
+    customType: "plan-internal",
     display: false,
   });
 });
@@ -375,7 +375,7 @@ test("critique pass routes orchestration through a hidden custom message after e
   expect(harness.sentUserMessages).toHaveLength(0);
   expect(harness.sentMessages).toHaveLength(1);
   expect(harness.sentMessages[0]).toMatchObject({
-    customType: "pi-plan-internal",
+    customType: "plan-internal",
     display: false,
   });
   expect(String(harness.sentMessages[0]?.content)).toContain(
@@ -410,7 +410,7 @@ test("hidden critique responses ignore unmatched agent_end payloads", async () =
       messages: [
         {
           role: "custom",
-          content: critiquePrompt.replace(critiqueRequestId ?? "", "pi-plan-999"),
+          content: critiquePrompt.replace(critiqueRequestId ?? "", "plan-999"),
         },
         {
           role: "assistant",
@@ -450,7 +450,7 @@ test("REFINE critique responses route through a hidden revision follow-up", asyn
 
   expect(harness.sentMessages).toHaveLength(2);
   expect(harness.sentMessages[1]).toMatchObject({
-    customType: "pi-plan-internal",
+    customType: "plan-internal",
     display: false,
   });
   expect(String(harness.sentMessages[1]?.content)).toContain(
@@ -618,8 +618,8 @@ test("approve action can include an execution note and restores normal tools", a
   });
 
   await harness.runCommand("plan", "on");
-  expect(harness.uiStub.statuses.get("pi-plan")).toBe("⏸ plan");
-  expect(harness.uiStub.widgets.get("pi-plan-todos")).toBeUndefined();
+  expect(harness.uiStub.statuses.get("plan")).toBe("⏸ plan");
+  expect(harness.uiStub.widgets.get("plan-todos")).toBeUndefined();
 
   await harness.emit("agent_end", {
     messages: [
@@ -640,8 +640,8 @@ test("approve action can include an execution note and restores normal tools", a
   expect(harness.sentUserMessages[0]).toContain(
     "Honor this user execution note while implementing the step: keep keyboard flow fast",
   );
-  expect(harness.uiStub.statuses.get("pi-plan")).toBe("📋 0/2");
-  expect(harness.uiStub.widgets.get("pi-plan-todos")).toEqual([
+  expect(harness.uiStub.statuses.get("plan")).toBe("📋 0/2");
+  expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
     "☐ A regression test for prompt leakage",
     "☐ Approval action UI to show a compact summary",
   ]);
@@ -678,8 +678,8 @@ test("execution DONE markers advance to the next guided step", async () => {
   expect(harness.sentUserMessages[1]).toContain(
     "Complete only step 2: Approval action UI to show a compact summary",
   );
-  expect(harness.uiStub.statuses.get("pi-plan")).toBe("📋 1/2");
-  expect(harness.uiStub.widgets.get("pi-plan-todos")).toEqual([
+  expect(harness.uiStub.statuses.get("plan")).toBe("📋 1/2");
+  expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
     "☑ A regression test for prompt leakage",
     "☐ Approval action UI to show a compact summary",
   ]);
@@ -730,8 +730,8 @@ test("final guided execution completion stops prompting and clears /todos state"
     message: "All tracked plan steps are complete.",
     level: "info",
   });
-  expect(harness.uiStub.statuses.get("pi-plan")).toBeUndefined();
-  expect(harness.uiStub.widgets.get("pi-plan-todos")).toBeUndefined();
+  expect(harness.uiStub.statuses.get("plan")).toBeUndefined();
+  expect(harness.uiStub.widgets.get("plan-todos")).toBeUndefined();
 
   await harness.runCommand("todos");
   expect(harness.uiStub.notifications).toContainEqual({
@@ -776,16 +776,16 @@ test("session shutdown restores tools and clears stale plan-mode status", async 
 
   await harness.runCommand("plan", "on");
   expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
-  expect(harness.uiStub.statuses.get("pi-plan")).toBe("⏸ plan");
+  expect(harness.uiStub.statuses.get("plan")).toBe("⏸ plan");
 
   await harness.emit("session_shutdown", { reason: "exit" });
 
   expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
-  expect(harness.uiStub.statuses.get("pi-plan")).toBeUndefined();
-  expect(harness.uiStub.widgets.get("pi-plan-todos")).toBeUndefined();
+  expect(harness.uiStub.statuses.get("plan")).toBeUndefined();
+  expect(harness.uiStub.widgets.get("plan-todos")).toBeUndefined();
 
   await harness.emit("session_start", { restored: true });
-  expect(harness.uiStub.statuses.get("pi-plan")).toBeUndefined();
+  expect(harness.uiStub.statuses.get("plan")).toBeUndefined();
 
   await harness.runCommand("plan", "status");
   expect(harness.uiStub.notifications).toContainEqual({
@@ -814,12 +814,12 @@ test("session shutdown clears guided execution lifecycle state", async () => {
     "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
   );
 
-  expect(harness.uiStub.statuses.get("pi-plan")).toBe("📋 0/2");
+  expect(harness.uiStub.statuses.get("plan")).toBe("📋 0/2");
 
   await harness.emit("session_shutdown", { reason: "exit" });
 
-  expect(harness.uiStub.statuses.get("pi-plan")).toBeUndefined();
-  expect(harness.uiStub.widgets.get("pi-plan-todos")).toBeUndefined();
+  expect(harness.uiStub.statuses.get("plan")).toBeUndefined();
+  expect(harness.uiStub.widgets.get("plan-todos")).toBeUndefined();
 
   await harness.runCommand("todos");
   expect(harness.uiStub.notifications).toContainEqual({

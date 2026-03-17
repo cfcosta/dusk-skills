@@ -1,11 +1,11 @@
-# pi-plan architecture notes
+# plan architecture notes
 
-This file tracks the repo-local architecture of the vendored `pi-plan` extension inside `duskpi`.
+This file tracks the repo-local architecture of the vendored `plan` extension inside `duskpi`.
 
 ## Current shape
 
-- `src/index.ts` is only the bootstrap layer. It registers `pi-plan` through `registerGuidedWorkflowExtension(...)` and wires `/todos` to the workflow instance.
-- `src/workflow.ts` defines `PiPlanWorkflow`, a thin `GuidedWorkflow` consumer with `pi-plan`-specific policy and UI hooks.
+- `src/index.ts` is only the bootstrap layer. It registers `plan` through `registerGuidedWorkflowExtension(...)` and wires `/todos` to the workflow instance.
+- `src/workflow.ts` defines `PiPlanWorkflow`, a thin `GuidedWorkflow` consumer with `plan`-specific policy and UI hooks.
 - Shared guided state in `packages/workflow-core` owns:
   - correlated planning requests
   - hidden critique and revision orchestration
@@ -13,7 +13,7 @@ This file tracks the repo-local architecture of the vendored `pi-plan` extension
   - execution item tracking and `[DONE:n]` syncing
   - `/todos` data sources
   - status and widget lifecycle cleanup on session boundaries
-- Local `pi-plan` code still owns:
+- Local `plan` code still owns:
   - plan-mode tool switching and restore behavior
   - plan-specific system prompts and critique text
   - the inline approval action UI
@@ -35,6 +35,6 @@ This file tracks the repo-local architecture of the vendored `pi-plan` extension
 ## Validation
 
 ```bash
-cd extensions/pi-plan && bun install && bun run check
+cd extensions/plan && bun install && bun run check
 cd packages/workflow-core && bun install && bun run check
 ```

@@ -131,11 +131,11 @@ Use it when you want Pi to:
 
 These four workflow-style extensions share the `PhaseWorkflow` runtime in `packages/workflow-core/`, so they keep the same phase-driven behavior and safety hooks.
 
-The bundled `pi-plan` extension uses the same package's `GuidedWorkflow` runtime instead. That guided path covers read-only planning, hidden critique and revision turns, approval callbacks, step tracking, and session cleanup.
+The bundled `plan` extension uses the same package's `GuidedWorkflow` runtime instead. That guided path covers read-only planning, hidden critique and revision turns, approval callbacks, step tracking, and session cleanup.
 
 ### 2. Switch into explicit planning mode
 
-The bundled `pi-plan` extension adds:
+The bundled `plan` extension adds:
 
 - `/plan`
 - `/todos`
@@ -184,7 +184,7 @@ That is why commands like these should be present right away:
 - `/todos`
 - `/innovate`
 
-The Catppuccin theme is activated by the bundled `pi-catppuccin` extension, which reads the package's `pi.theme` value and calls `setTheme()` after the wrapped binary has already exposed the bundled theme files.
+The Catppuccin theme is activated by the bundled `catppuccin` extension, which reads the package's `pi.theme` value and calls `setTheme()` after the wrapped binary has already exposed the bundled theme files.
 
 ## Repository layout
 
@@ -198,8 +198,8 @@ Notable entries:
 - `owasp-fix`
 - `test-audit`
 - `refactor`
-- `pi-catppuccin`
-- `pi-plan` (repo-local private extension vendored under `extensions/pi-plan`)
+- `catppuccin`
+- `plan` (repo-local private extension vendored under `extensions/plan`)
 
 ### `packages/workflow-core/`
 
@@ -238,7 +238,7 @@ The flake:
 - vendors local extensions, skills, prompts, and themes into one output
 - wraps the final `pi` binary so bundled resources are loaded on startup
 
-`pi-plan` is vendored directly into `extensions/pi-plan` as a repo-local private extension, so you can modify it locally like the other bundled extensions without treating this copy as a separately published package.
+`plan` is vendored directly into `extensions/plan` as a repo-local private extension, so you can modify it locally like the other bundled extensions without treating this copy as a separately published package.
 
 ## Why this repo exists
 

@@ -1,8 +1,8 @@
 {
-  "name": "@duskpi/pi-plan",
+  "name": "@duskpi/plan",
   "version": "0.1.0",
   "private": true,
-  "description": "Vendored pi-plan extension for duskpi: read-only planning mode with approval-based execution",
+  "description": "Vendored plan extension for duskpi: read-only planning mode with approval-based execution",
   "type": "module",
   "scripts": {
     "test": "bun test",
