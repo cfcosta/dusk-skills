@@ -18,6 +18,8 @@ The default package bundles upstream Pi together with repo-owned resources:
 - **Planning extension**
   - `/plan`
   - `/todos`
+- **Side-question extension**
+  - `/btw`
 - **Prompt templates**
   - `/innovate`
   - `/jj-commit`
@@ -149,7 +151,19 @@ This is useful when you want:
 - a review point before execution
 - tracked step-by-step execution after approval
 
-### 3. Use prompt templates for recurring tasks
+### 3. Ask side questions without interrupting the main task
+
+The bundled `/btw` extension opens an ephemeral overlay for quick side questions.
+
+Use it when you want to:
+
+- ask a focused repo question while Pi keeps working
+- sanity-check a design detail without polluting the main thread
+- get a quick answer based on the current session context and recent tool activity
+
+The side answer is tool-less by design and is intended to feel lightweight and disposable.
+
+### 4. Use prompt templates for recurring tasks
 
 The distribution ships prompt templates that expand into reusable workflows.
 
@@ -158,7 +172,7 @@ The distribution ships prompt templates that expand into reusable workflows.
 
 These are available immediately because the package preloads them.
 
-### 4. Use specialized skills without extra setup
+### 5. Use specialized skills without extra setup
 
 The bundled skills cover common high-value tasks:
 
@@ -182,6 +196,7 @@ That is why commands like these should be present right away:
 - `/refactor`
 - `/plan`
 - `/todos`
+- `/btw`
 - `/innovate`
 
 The Catppuccin theme is activated by the bundled `catppuccin` extension, which reads the package's `pi.theme` value and calls `setTheme()` after the wrapped binary has already exposed the bundled theme files.
@@ -200,6 +215,7 @@ Notable entries:
 - `refactor`
 - `catppuccin`
 - `plan` (repo-local private extension vendored under `extensions/plan`)
+- `btw`
 
 ### `packages/workflow-core/`
 

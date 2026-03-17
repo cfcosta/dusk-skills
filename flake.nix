@@ -134,6 +134,7 @@
                 --add-flags "--extension $out/extensions/test-audit/index.ts" \
                 --add-flags "--extension $out/extensions/catppuccin/index.ts" \
                 --add-flags "--extension $out/extensions/plan/index.ts" \
+                --add-flags "--extension $out/extensions/btw/index.ts" \
                 --add-flags "--skill $out/skills" \
                 --add-flags "--prompt-template $out/prompts" \
                 --add-flags "--theme $out/themes"
