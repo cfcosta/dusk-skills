@@ -2,9 +2,12 @@ import {
   registerGuidedWorkflowExtension,
   type ExtensionAPI,
 } from "../../../packages/workflow-core/src/index";
+import { registerAskUserQuestionTool } from "./ask-user-question-tool";
 import { PLAN_COMMAND_DESCRIPTION, PiPlanWorkflow, TODOS_COMMAND_DESCRIPTION } from "./workflow";
 
 export default function planExtension(api: ExtensionAPI): void {
+  registerAskUserQuestionTool(api);
+
   const workflow = new PiPlanWorkflow(api);
 
   registerGuidedWorkflowExtension(api, {

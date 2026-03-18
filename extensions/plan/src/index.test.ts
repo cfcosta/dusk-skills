@@ -73,6 +73,7 @@ function createUiStub(customSelection?: { cancelled: boolean; action?: string; n
 function createPlanExtensionHarness(options: HarnessOptions = {}) {
   const commands = new Map<string, CommandHandler>();
   const eventHandlers = new Map<string, EventHandler[]>();
+  const tools = new Map<string, unknown>();
   const sentUserMessages: string[] = [];
   const sentMessages: Array<{ customType?: string; content?: unknown; display?: boolean }> = [];
   const allTools = [
@@ -96,6 +97,15 @@ function createPlanExtensionHarness(options: HarnessOptions = {}) {
   const pi = {
     registerCommand(name: string, config: { handler: CommandHandler }) {
       commands.set(name, config.handler);
+    },
+    registerTool(definition: { name: string }) {
+      tools.set(definition.name, definition);
+      if (!allTools.some((tool) => tool.name === definition.name)) {
+        allTools.push({ name: definition.name });
+      }
+      if (!activeTools.includes(definition.name)) {
+        activeTools = [...activeTools, definition.name];
+      }
     },
     on(eventName: string, handler: EventHandler) {
       const handlers = eventHandlers.get(eventName) ?? [];
@@ -138,6 +148,7 @@ function createPlanExtensionHarness(options: HarnessOptions = {}) {
     uiStub,
     commands,
     eventHandlers,
+    tools,
     sentMessages,
     sentUserMessages,
     getActiveTools: () => [...activeTools],
@@ -255,6 +266,7 @@ test("plan extension registers the guided workflow listener surface plus todos",
     "tool_call",
     "turn_end",
   ]);
+  expect(harness.tools.has("AskUserQuestion")).toBe(true);
 });
 
 test("one-shot /plan task enables plan mode and starts a correlated planning request", async () => {
@@ -262,7 +274,14 @@ test("one-shot /plan task enables plan mode and starts a correlated planning req
 
   await harness.runCommand("plan", "Investigate flaky prompt extraction");
 
-  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "AskUserQuestion",
+  ]);
   expect(harness.sentUserMessages).toHaveLength(1);
   expect(harness.sentUserMessages[0]).toContain("Investigate flaky prompt extraction");
   expect(extractRequestId(harness.sentUserMessages[0] ?? "")).toBeTruthy();
@@ -335,7 +354,14 @@ test("plan extension harness registers commands and handles agent_end in read-on
   const harness = createPlanExtensionHarness();
 
   await harness.runCommand("plan", "on");
-  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "AskUserQuestion",
+  ]);
 
   await harness.emit("agent_end", {
     messages: [
@@ -603,7 +629,14 @@ test("continue selection sends a correlated planning follow-up and keeps read-on
     "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
   );
 
-  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "AskUserQuestion",
+  ]);
   expect(harness.sentUserMessages).toHaveLength(1);
   expect(harness.sentUserMessages[0]).toContain(
     "Continue planning from the proposed plan. User note: split step two.",
@@ -635,7 +668,16 @@ test("approve action can include an execution note and restores normal tools", a
     "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- compact and ready",
   );
 
-  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "edit",
+    "write",
+    "AskUserQuestion",
+  ]);
   expect(harness.sentUserMessages).toHaveLength(1);
   expect(harness.sentUserMessages[0]).toContain(
     "Honor this user execution note while implementing the step: keep keyboard flow fast",
@@ -761,7 +803,16 @@ test("exit selection restores normal tools and clears tracked progress", async (
     "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
   );
 
-  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "edit",
+    "write",
+    "AskUserQuestion",
+  ]);
   expect(harness.sentUserMessages).toHaveLength(0);
 
   await harness.runCommand("todos");
@@ -775,12 +826,28 @@ test("session shutdown restores tools and clears stale plan-mode status", async 
   const harness = createPlanExtensionHarness({ hasUI: true });
 
   await harness.runCommand("plan", "on");
-  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls"]);
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "AskUserQuestion",
+  ]);
   expect(harness.uiStub.statuses.get("plan")).toBe("⏸ plan");
 
   await harness.emit("session_shutdown", { reason: "exit" });
 
-  expect(harness.getActiveTools()).toEqual(["read", "bash", "grep", "find", "ls", "edit", "write"]);
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "edit",
+    "write",
+    "AskUserQuestion",
+  ]);
   expect(harness.uiStub.statuses.get("plan")).toBeUndefined();
   expect(harness.uiStub.widgets.get("plan-todos")).toBeUndefined();
 

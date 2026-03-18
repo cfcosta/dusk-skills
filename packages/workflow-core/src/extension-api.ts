@@ -129,6 +129,33 @@ interface ExtensionEventContext {
   session_shutdown: ExtensionContext;
 }
 
+export interface ExtensionToolResult<T = unknown> {
+  content: Array<{ type: "text"; text: string }>;
+  details?: T;
+}
+
+export interface ExtensionToolDefinition<Params = unknown, Details = unknown> {
+  name: string;
+  label?: string;
+  description: string;
+  promptSnippet?: string;
+  promptGuidelines?: string[];
+  parameters: unknown;
+  execute(
+    toolCallId: string,
+    params: Params,
+    signal: AbortSignal,
+    onUpdate: ((update: ExtensionToolResult<Details>) => void) | undefined,
+    ctx: ExtensionContext,
+  ): Promise<ExtensionToolResult<Details>> | ExtensionToolResult<Details>;
+  renderCall?(args: Params, theme: ExtensionTheme): unknown;
+  renderResult?(
+    result: ExtensionToolResult<Details>,
+    options: unknown,
+    theme: ExtensionTheme,
+  ): unknown;
+}
+
 export interface ExtensionAPI {
   sendMessage<T = unknown>(message: ExtensionCustomMessage<T>, options?: SendMessageOptions): void;
   sendUserMessage(message: string | unknown[], options?: SendUserMessageOptions): void;
@@ -138,6 +165,9 @@ export interface ExtensionAPI {
       description: string;
       handler: (args: unknown, ctx: ExtensionContext) => unknown;
     },
+  ): void;
+  registerTool<Params = unknown, Details = unknown>(
+    definition: ExtensionToolDefinition<Params, Details>,
   ): void;
   getActiveTools(): string[];
   getAllTools(): ToolInfo[];
