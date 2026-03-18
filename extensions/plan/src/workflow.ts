@@ -207,8 +207,8 @@ export class PiPlanWorkflow extends GuidedWorkflow {
         extractItems({ planText }) {
           return extractTodoItems(planText).map((item) => ({ ...item }));
         },
-        buildExecutionPrompt({ currentStep, note }) {
-          return self.buildExecutionPrompt(currentStep, note);
+        buildExecutionPrompt({ currentStep, note, planText }) {
+          return self.buildExecutionPrompt(currentStep, planText, note);
         },
       },
       text: {
@@ -668,10 +668,20 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return "[APPROVED PLAN EXECUTION]\nFinish implementation and verification.";
     }
 
+    const currentDetails = describeExecutionStep(this.getLatestPlanText(), currentStep);
     const backlog = remaining.map((item) => `${item.step}. ${item.text}`).join("\n");
     return [
       "[APPROVED PLAN EXECUTION]",
-      `Current step: ${currentStep.step}. ${currentStep.text}`,
+      `Current step: ${currentStep.step}. ${currentDetails.objective}`,
+      currentDetails.targets
+        ? `Target files/components: ${currentDetails.targets}`
+        : undefined,
+      currentDetails.validation
+        ? `Validation method: ${currentDetails.validation}`
+        : undefined,
+      currentDetails.risks
+        ? `Risks and rollback notes: ${currentDetails.risks}`
+        : undefined,
       this.executionConstraintNote
         ? `User execution note: ${this.executionConstraintNote}`
         : undefined,
@@ -685,17 +695,26 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       .join("\n");
   }
 
-  private buildExecutionPrompt(currentStep: GuidedWorkflowExecutionItem, note?: string): string {
+  private buildExecutionPrompt(
+    currentStep: GuidedWorkflowExecutionItem,
+    planText: string,
+    note?: string,
+  ): string {
+    const stepDetails = describeExecutionStep(planText, currentStep);
+
     return [
       EXECUTION_TRIGGER_PROMPT,
-      `Complete only step ${currentStep.step}: ${currentStep.text}`,
+      `Complete only step ${currentStep.step}: ${stepDetails.objective}`,
       note ? `Honor this user execution note while implementing the step: ${note}` : undefined,
+      stepDetails.targets ? `Target files/components: ${stepDetails.targets}` : undefined,
+      stepDetails.validation ? `Validation method: ${stepDetails.validation}` : undefined,
+      stepDetails.risks ? `Risks and rollback notes: ${stepDetails.risks}` : undefined,
       "Implement it, validate it, and create one atomic jujutsu commit for that step before ending the turn.",
       "Use `jj commit <changed paths> -m <message>`, follow Conventional Commits, include a detailed description, and finish with the matching [DONE:n] marker after the commit succeeds.",
       "Do not start the following step in the same turn.",
     ]
       .filter((line): line is string => typeof line === "string")
-      .join(" ");
+      .join("\n");
   }
 
   private syncExecutionShadowFromGuided(
@@ -1002,6 +1021,32 @@ export function buildApprovalReviewState(
     critiqueSummary: options.critiqueSummary,
     badges: buildReviewBadges(planText, steps),
     wasRevised: options.wasRevised ?? false,
+  };
+}
+
+function summarizeExecutionValues(values: string[]): string | undefined {
+  const normalized = values.map((value) => value.trim()).filter((value) => value.length > 0);
+  return normalized.length > 0 ? normalized.join("; ") : undefined;
+}
+
+function describeExecutionStep(
+  planText: string | undefined,
+  currentStep: Pick<GuidedWorkflowExecutionItem, "step" | "text">,
+): {
+  objective: string;
+  targets?: string;
+  validation?: string;
+  risks?: string;
+} {
+  const structuredStep = planText
+    ? extractPlanSteps(planText).find((step) => step.step === currentStep.step)
+    : undefined;
+
+  return {
+    objective: structuredStep?.objective ?? currentStep.text,
+    targets: structuredStep ? summarizeExecutionValues(structuredStep.targets) : undefined,
+    validation: structuredStep ? summarizeExecutionValues(structuredStep.validation) : undefined,
+    risks: structuredStep ? summarizeExecutionValues(structuredStep.risks) : undefined,
   };
 }
 

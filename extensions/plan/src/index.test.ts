@@ -184,6 +184,28 @@ function buildPlanText(): string {
   ].join("\n");
 }
 
+function buildRichPlanText(): string {
+  return [
+    "1) Task understanding",
+    "2) Codebase findings",
+    "3) Approach options / trade-offs",
+    "4) Open questions / assumptions",
+    "5) Plan:",
+    "1. Add a regression test for prompt leakage",
+    "   - target files/components:",
+    "     - src/index.test.ts",
+    "     - src/workflow.ts",
+    "   - validation method:",
+    "     - bun test ./src/index.test.ts",
+    "     - bun run typecheck",
+    "   - risks and rollback notes: revert the structured execution prompt if agent guidance regresses",
+    "2. Update the approval action UI to show a compact summary",
+    "   - target files/components: src/plan-action-ui.ts",
+    "   - validation method: bun test ./src/index.test.ts",
+    "6) Ready to execute when approved.",
+  ].join("\n");
+}
+
 function extractRequestId(prompt: string): string | undefined {
   const match = prompt.match(/<!--\s*workflow-request-id:([^>]+)\s*-->/i);
   return match?.[1]?.trim();
@@ -852,7 +874,7 @@ test("approve action can include an execution note and restores normal tools", a
   ]);
 });
 
-test("execution DONE markers advance to the next guided step", async () => {
+test("execution prompts rehydrate structured step details and DONE markers advance", async () => {
   const harness = createPlanExtensionHarness({
     hasUI: true,
     customSelection: { cancelled: false, action: "approve" },
@@ -863,13 +885,27 @@ test("execution DONE markers advance to the next guided step", async () => {
     messages: [
       {
         role: "assistant",
-        content: [{ type: "text", text: buildPlanText() }],
+        content: [{ type: "text", text: buildRichPlanText() }],
       },
     ],
   });
   await emitMatchedHiddenResponse(
     harness,
     "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
+
+  expect(harness.sentUserMessages).toHaveLength(1);
+  expect(harness.sentUserMessages[0]).toContain(
+    "Complete only step 1: Add a regression test for prompt leakage",
+  );
+  expect(harness.sentUserMessages[0]).toContain(
+    "Target files/components: src/index.test.ts; src/workflow.ts",
+  );
+  expect(harness.sentUserMessages[0]).toContain(
+    "Validation method: bun test ./src/index.test.ts; bun run typecheck",
+  );
+  expect(harness.sentUserMessages[0]).toContain(
+    "Risks and rollback notes: revert the structured execution prompt if agent guidance regresses",
   );
 
   await harness.emit("turn_end", {
@@ -881,7 +917,13 @@ test("execution DONE markers advance to the next guided step", async () => {
 
   expect(harness.sentUserMessages).toHaveLength(2);
   expect(harness.sentUserMessages[1]).toContain(
-    "Complete only step 2: Approval action UI to show a compact summary",
+    "Complete only step 2: Update the approval action UI to show a compact summary",
+  );
+  expect(harness.sentUserMessages[1]).toContain(
+    "Target files/components: src/plan-action-ui.ts",
+  );
+  expect(harness.sentUserMessages[1]).toContain(
+    "Validation method: bun test ./src/index.test.ts",
   );
   expect(harness.uiStub.statuses.get("plan")).toBe("📋 1/2");
   expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
