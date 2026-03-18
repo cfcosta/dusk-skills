@@ -147,7 +147,7 @@ export function extractTodoItems(message: string): TodoItem[] {
   }
 
   const isPlanBoundaryLine = (text: string): boolean =>
-    /^(goal understanding(?: \(brief\))?|evidence gathered|uncertainties? \/ assumptions|risks? and rollback notes?|ready to execute when approved\.?|end with: "ready to execute when approved\.?")$/i.test(
+    /^(goal understanding(?: \(brief\))?|task understanding|evidence gathered|codebase findings|approach options \/ trade-offs|uncertainties? \/ assumptions|open questions? \/ assumptions|risks? and rollback notes?|ready to execute when approved\.?|end with: "ready to execute when approved\.?")$/i.test(
       normalizeStructuredLine(text),
     );
 

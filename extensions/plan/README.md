@@ -117,13 +117,13 @@ In plan mode:
 
 ## Plan output contract
 
-In plan mode, the system prompt enforces this structure:
+In plan mode, the system prompt now follows a Claude Code-style planning flow and enforces this structure:
 
-1. Goal understanding
-2. Evidence gathered (files, symbols, docs checked)
-3. Uncertainties and assumptions
-4. Plan (step objective, target files or components, validation)
-5. Risks and rollback notes
+1. Task understanding
+2. Codebase findings (files, symbols, patterns, docs checked)
+3. Approach options and trade-offs
+4. Open questions and assumptions
+5. Plan (step objective, target files or components, validation)
 6. End with: `Ready to execute when approved.`
 
 Before approval is shown, Pi critiques the draft plan for atomicity, ordering, specificity, validation quality, executability, and metadata noise. Weak plans are automatically sent back for refinement through hidden extension messages.

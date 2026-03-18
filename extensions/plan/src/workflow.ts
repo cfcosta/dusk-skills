@@ -46,28 +46,33 @@ Hard rules:
 - Allowed actions: inspection, analysis, and plan creation only.
 - Never perform any write/change action.
 - Never use edit/write or mutating shell commands.
+- Do not implement anything until the user approves the plan.
 
 MANDATORY workflow:
-1) Context gathering first
-   - Inspect relevant files/symbols/config/tests before proposing a plan.
-   - If external dependency behavior matters, gather official docs/reference evidence.
-   - No evidence-free planning.
-2) Requirement clarification
-   - List uncertainties/assumptions explicitly.
-   - If there is a blocking ambiguity, ask concise clarifying question(s) before finalizing.
-3) Plan design
-   - Build a concrete execution plan grounded in gathered evidence.
+1) Explore first
+   - Thoroughly explore the codebase before proposing changes.
+   - Read the relevant files, symbols, tests, configs, and adjacent features.
+   - Identify existing patterns and architectural constraints.
+   - If external behavior matters, gather official docs/reference evidence.
+2) Consider approaches
+   - Identify the most plausible implementation options.
+   - Note the important trade-offs when the design could reasonably go multiple ways.
+3) Clarify only when needed
+   - If a blocking ambiguity or user preference would materially change the design, ask concise clarifying question(s) before finalizing.
+4) Produce an implementation plan for approval
+   - Build a concrete execution plan grounded in what you found.
+   - Keep steps atomic enough to execute one at a time.
 
-Output contract (use this structure):
-1) Goal understanding (brief)
-2) Evidence gathered
-   - files/paths/symbols/docs checked
-3) Uncertainties / assumptions
-4) Plan:
+Response contract (use this structure):
+1) Task understanding
+2) Codebase findings
+   - files/paths/symbols/patterns/docs checked
+3) Approach options / trade-offs
+4) Open questions / assumptions
+5) Plan:
    1. step objective
    2. target files/components
    3. validation method
-5) Risks and rollback notes
 6) End with: "Ready to execute when approved."
 `.trim();
 
@@ -148,7 +153,15 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     super(pi, {
       id: STATUS_KEY,
       parseGoalArg: parsePlanGoalArg,
-      buildPlanningPrompt: ({ goal }) => goal ?? "Create a concrete implementation plan.",
+      buildPlanningPrompt: ({ goal }) => {
+        return [
+          "Plan this implementation task in read-only mode before making any changes.",
+          "Explore the codebase, identify existing patterns and similar features, consider important trade-offs, and ask concise clarifying questions only if a blocking ambiguity remains.",
+          "Then return a concrete implementation plan that follows the required plan-mode response contract.",
+          "",
+          `Task: ${goal ?? "Create a concrete implementation plan."}`,
+        ].join("\n");
+      },
       critique: {
         buildCritiquePrompt: ({ planText }) => {
           return `${PLAN_CRITIQUE_PROMPT}\n\nPlan to critique:\n\n${planText}`;

@@ -148,13 +148,13 @@ function createPlanExtensionHarness(options: HarnessOptions = {}) {
 
 function buildPlanText(): string {
   return [
-    "1) Goal understanding (brief)",
-    "2) Evidence gathered",
-    "3) Uncertainties / assumptions",
-    "4) Plan:",
+    "1) Task understanding",
+    "2) Codebase findings",
+    "3) Approach options / trade-offs",
+    "4) Open questions / assumptions",
+    "5) Plan:",
     "1. Add a regression test for prompt leakage",
     "2. Update the approval action UI to show a compact summary",
-    "5) Risks and rollback notes",
     "6) Ready to execute when approved.",
   ].join("\n");
 }
@@ -205,12 +205,12 @@ test("extractTodoItems ignores the ready-to-execute footer", async () => {
   expect(
     extractTodoItems(
       [
-        "1) Goal understanding (brief)",
-        "2) Evidence gathered",
-        "3) Uncertainties / assumptions",
-        "4) Plan:",
+        "1) Task understanding",
+        "2) Codebase findings",
+        "3) Approach options / trade-offs",
+        "4) Open questions / assumptions",
+        "5) Plan:",
         "1. Add a regression test for prompt leakage",
-        "5) Risks and rollback notes",
         "6) Ready to execute when approved.",
       ].join("\n"),
     ),
@@ -223,17 +223,17 @@ test("extractTodoItems handles indented plan steps under the numbered plan secti
   expect(
     extractTodoItems(
       [
-        "1) Goal understanding (brief)",
-        "2) Evidence gathered",
-        "3) Uncertainties / assumptions",
-        "4) Plan:",
+        "1) Task understanding",
+        "2) Codebase findings",
+        "3) Approach options / trade-offs",
+        "4) Open questions / assumptions",
+        "5) Plan:",
         "   1. Add a regression test for prompt leakage",
         "      - target files/components: src/index.test.ts",
         "      - validation method: bun test",
         "   2. Update the approval action UI to show a compact summary",
         "      - target files/components: src/plan-action-ui.ts",
         "      - validation method: bun test",
-        "5) Risks and rollback notes",
         "6) Ready to execute when approved.",
       ].join("\n"),
     ),
@@ -341,7 +341,7 @@ test("plan extension harness registers commands and handles agent_end in read-on
     messages: [
       {
         role: "assistant",
-        content: "1) Goal understanding\n2) Evidence gathered\n3) Uncertainties / assumptions",
+        content: "1) Task understanding\n2) Codebase findings\n3) Approach options / trade-offs",
       },
     ],
   });
@@ -483,13 +483,13 @@ test("revised hidden plan drafts re-enter critique before approval", async () =>
   await emitMatchedHiddenResponse(
     harness,
     [
-      "1) Goal understanding (brief)",
-      "2) Evidence gathered",
-      "3) Uncertainties / assumptions",
-      "4) Plan:",
+      "1) Task understanding",
+      "2) Codebase findings",
+      "3) Approach options / trade-offs",
+      "4) Open questions / assumptions",
+      "5) Plan:",
       "1. Add a regression test for prompt leakage",
       "2. Split the approval UI update into a focused summary step",
-      "5) Risks and rollback notes",
       "6) Ready to execute when approved.",
     ].join("\n"),
   );
@@ -514,17 +514,17 @@ test("indented plan output still reaches the approval UI after critique", async 
           {
             type: "text",
             text: [
-              "1) Goal understanding (brief)",
-              "2) Evidence gathered",
-              "3) Uncertainties / assumptions",
-              "4) Plan:",
+              "1) Task understanding",
+              "2) Codebase findings",
+              "3) Approach options / trade-offs",
+              "4) Open questions / assumptions",
+              "5) Plan:",
               "   1. Add a regression test for prompt leakage",
               "      - target files/components: src/index.test.ts",
               "      - validation method: bun test",
               "   2. Update the approval action UI to show a compact summary",
               "      - target files/components: src/plan-action-ui.ts",
               "      - validation method: bun test",
-              "5) Risks and rollback notes",
               "6) Ready to execute when approved.",
             ].join("\n"),
           },
