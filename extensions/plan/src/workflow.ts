@@ -20,8 +20,10 @@ import {
   extractPlanSteps,
   extractTodoItems,
   isSafeReadOnlyCommand,
+  markTodoItemsCompleted,
   normalizeArg,
   parseCritiqueVerdict,
+  toTodoItems,
   type PlanStep,
   type TodoItem,
 } from "./utils";
@@ -604,17 +606,27 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   }
 
   private getTodosItemsFromGuidedState(): TodoItem[] {
-    const execution = this.getExecutionSnapshot();
-    if (execution.items.length > 0) {
-      return execution.items.map((item) => ({
+    return this.buildCompactTodoItems(this.getLatestPlanText(), this.getExecutionSnapshot().items);
+  }
+
+  private buildCompactTodoItems(
+    planText: string | undefined,
+    executionItems: GuidedWorkflowExecutionItem[],
+  ): TodoItem[] {
+    const structuredTodoItems = planText ? toTodoItems(extractPlanSteps(planText)) : [];
+    if (structuredTodoItems.length === 0) {
+      return executionItems.map((item) => ({
         step: item.step,
         text: item.text,
         completed: item.completed,
       }));
     }
 
-    const latestPlanText = this.getLatestPlanText();
-    return latestPlanText ? extractTodoItems(latestPlanText) : [];
+    const completedSteps = executionItems
+      .filter((item) => item.completed)
+      .map((item) => item.step);
+    markTodoItemsCompleted(structuredTodoItems, completedSteps);
+    return structuredTodoItems;
   }
 
   private syncLocalLifecycleStateFromGuided(): void {
@@ -624,11 +636,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     this.planModeEnabled = state.phase === "planning" || state.phase === "approval";
     this.executionMode = state.phase === "executing" && execution.items.length > 0;
     this.executionConstraintNote = execution.note ?? "";
-    this.todoItems = execution.items.map((item) => ({
-      step: item.step,
-      text: item.text,
-      completed: item.completed,
-    }));
+    this.todoItems = this.buildCompactTodoItems(this.getLatestPlanText(), execution.items);
     this.latestPlanDraft = this.getLatestPlanText() ?? "";
   }
 
@@ -728,11 +736,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     if (currentPhase === "executing") {
       this.executionMode = execution.items.length > 0;
       this.executionConstraintNote = execution.note ?? this.executionConstraintNote;
-      this.todoItems = execution.items.map((item) => ({
-        step: item.step,
-        text: item.text,
-        completed: item.completed,
-      }));
+      this.todoItems = this.buildCompactTodoItems(this.getLatestPlanText(), execution.items);
       this.setStatus(ctx);
       return;
     }
@@ -778,7 +782,8 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return;
     }
 
-    const lines = executionItems.map((item) => {
+    const todoItems = this.buildCompactTodoItems(this.getLatestPlanText(), executionItems);
+    const lines = todoItems.map((item) => {
       if (item.completed) {
         return (
           ctx.ui.theme.fg("success", "☑ ") +

@@ -324,12 +324,16 @@ export function extractPlanSteps(message: string): PlanStep[] {
   return steps;
 }
 
-export function extractTodoItems(message: string): TodoItem[] {
-  return extractPlanSteps(message).map((step) => ({
+export function toTodoItems(steps: PlanStep[]): TodoItem[] {
+  return steps.map((step) => ({
     step: step.step,
     text: step.label,
     completed: false,
   }));
+}
+
+export function extractTodoItems(message: string): TodoItem[] {
+  return toTodoItems(extractPlanSteps(message));
 }
 
 export function extractDoneSteps(message: string): number[] {
@@ -343,13 +347,16 @@ export function extractDoneSteps(message: string): number[] {
   return steps;
 }
 
-export function markCompletedSteps(text: string, items: TodoItem[]): number {
-  const doneSteps = extractDoneSteps(text);
-  for (const step of doneSteps) {
+export function markTodoItemsCompleted(items: TodoItem[], completedSteps: number[]): number {
+  for (const step of completedSteps) {
     const item = items.find((candidate) => candidate.step === step);
     if (item) {
       item.completed = true;
     }
   }
-  return doneSteps.length;
+  return completedSteps.length;
+}
+
+export function markCompletedSteps(text: string, items: TodoItem[]): number {
+  return markTodoItemsCompleted(items, extractDoneSteps(text));
 }

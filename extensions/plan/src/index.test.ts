@@ -939,6 +939,68 @@ test("execution prompts rehydrate structured step details and DONE markers advan
   });
 });
 
+test("todos output and widget stay compact for metadata-rich plans", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "approve" },
+  });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildRichPlanText() }],
+      },
+    ],
+  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
+
+  const initialWidgetLines = harness.uiStub.widgets.get("plan-todos") ?? [];
+  expect(initialWidgetLines).toEqual([
+    "☐ A regression test for prompt leakage",
+    "☐ Approval action UI to show a compact summary",
+  ]);
+  expect(initialWidgetLines.join("\n")).not.toContain("src/index.test.ts");
+  expect(initialWidgetLines.join("\n")).not.toContain("bun run typecheck");
+
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications.at(-1)).toEqual({
+    message:
+      "Plan progress 0/2\n1. ○ A regression test for prompt leakage\n2. ○ Approval action UI to show a compact summary",
+    level: "info",
+  });
+  expect(harness.uiStub.notifications.at(-1)?.message).not.toContain("src/index.test.ts");
+  expect(harness.uiStub.notifications.at(-1)?.message).not.toContain("Validation method");
+
+  await harness.emit("turn_end", {
+    message: {
+      role: "assistant",
+      content: [{ type: "text", text: "Implemented step one [DONE:1]" }],
+    },
+  });
+
+  const updatedWidgetLines = harness.uiStub.widgets.get("plan-todos") ?? [];
+  expect(updatedWidgetLines).toEqual([
+    "☑ A regression test for prompt leakage",
+    "☐ Approval action UI to show a compact summary",
+  ]);
+  expect(updatedWidgetLines.join("\n")).not.toContain("src/index.test.ts");
+  expect(updatedWidgetLines.join("\n")).not.toContain("bun run typecheck");
+
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications.at(-1)).toEqual({
+    message:
+      "Plan progress 1/2\n1. ✓ A regression test for prompt leakage\n2. ○ Approval action UI to show a compact summary",
+    level: "info",
+  });
+  expect(harness.uiStub.notifications.at(-1)?.message).not.toContain("src/index.test.ts");
+  expect(harness.uiStub.notifications.at(-1)?.message).not.toContain("Validation method");
+});
+
 test("final guided execution completion stops prompting and clears /todos state", async () => {
   const harness = createPlanExtensionHarness({
     hasUI: true,
