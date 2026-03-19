@@ -233,7 +233,7 @@ test("workflow limits refinement attempts", async () => {
   assert.match(notifications.at(-1)?.message ?? "", /refactor cancelled/i);
 });
 
-test("analysis phases block write-capable tool variants but allow bash", async () => {
+test("analysis phases block write-capable tools and only allow safe bash", async () => {
   const { workflow, ctx } = createHarness();
 
   await workflow.handleCommand("", ctx);
@@ -241,12 +241,23 @@ test("analysis phases block write-capable tool variants but allow bash", async (
   const writeResult = await workflow.handleToolCall({ toolName: "Write" });
   const lowerEditResult = await workflow.handleToolCall({ toolName: "edit" });
   const multiEditResult = await workflow.handleToolCall({ toolName: "MultiEdit" });
-  const bashResult = await workflow.handleToolCall({ toolName: "Bash" });
+  const mutatingBashResult = await workflow.handleToolCall({
+    toolName: "Bash",
+    input: { command: "rm -rf tmp" },
+  });
+  const readOnlyBashResult = await workflow.handleToolCall({
+    toolName: "Bash",
+    input: { command: "ls -la" },
+  });
 
   assert.equal(writeResult?.block, true);
   assert.equal(lowerEditResult?.block, true);
   assert.equal(multiEditResult?.block, true);
-  assert.equal(bashResult, undefined);
+  assert.deepEqual(mutatingBashResult, {
+    block: true,
+    reason: "Workflow analysis phase blocked a potentially mutating bash command: rm -rf tmp",
+  });
+  assert.equal(readOnlyBashResult, undefined);
 });
 
 test("loadPrompts loads prompt bundle from a valid directory", () => {
