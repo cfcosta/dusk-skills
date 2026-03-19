@@ -273,6 +273,11 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   async handleCommand(args: unknown, ctx: ExtensionContext): Promise<GuidedWorkflowResult> {
     const raw = typeof args === "string" ? args.trim() : "";
 
+    const nonUiApprovalResult = await this.handleNonUiApprovalCommand(raw, ctx);
+    if (nonUiApprovalResult) {
+      return nonUiApprovalResult;
+    }
+
     if (raw.length === 0) {
       if (this.planModeEnabled) {
         this.exitPlanMode(ctx, "Plan mode disabled. Back to YOLO mode.", {
@@ -500,6 +505,74 @@ export class PiPlanWorkflow extends GuidedWorkflow {
 
     ctx.ui.setStatus(STATUS_KEY, undefined);
     ctx.ui.setWidget(TODO_WIDGET_KEY, undefined);
+  }
+
+  private async handleNonUiApprovalCommand(
+    raw: string,
+    ctx: ExtensionContext,
+  ): Promise<GuidedWorkflowResult | undefined> {
+    if (ctx.hasUI || this.getStateSnapshot().phase !== "approval") {
+      return undefined;
+    }
+
+    const [actionToken, ...noteParts] = raw.split(/\s+/).filter((part) => part.length > 0);
+    const action = normalizeArg(actionToken ?? "");
+    const note = noteParts.join(" ").trim();
+
+    if (action === "approve") {
+      return this.executeNonUiApprovalSelection({ action: "approve" }, ctx);
+    }
+
+    if (action === "continue") {
+      if (note.length === 0) {
+        notify(this.pi, ctx, "Usage: /plan continue <note> while approval is pending.", "error");
+        return { kind: "ok" };
+      }
+
+      this.resetPlanningDraft();
+      return this.executeNonUiApprovalSelection({ action: "continue", note }, ctx);
+    }
+
+    if (action === "regenerate") {
+      this.todoItems = [];
+      this.resetExecutionState();
+      this.resetPlanningDraft();
+      this.setStatus(ctx);
+      return this.executeNonUiApprovalSelection({ action: "regenerate" }, ctx);
+    }
+
+    if (action === "exit") {
+      return this.executeNonUiApprovalSelection({ action: "exit" }, ctx);
+    }
+
+    return undefined;
+  }
+
+  private async executeNonUiApprovalSelection(
+    selection: { action: "approve" | "continue" | "regenerate" | "exit"; note?: string },
+    ctx: ExtensionContext,
+  ): Promise<GuidedWorkflowResult> {
+    const workflow = this as unknown as {
+      options?: {
+        approval?: {
+          selectAction?: (args: unknown, ctx: ExtensionContext) => unknown;
+        };
+      };
+      handleApprovalReady?: (ctx: ExtensionContext) => Promise<GuidedWorkflowResult>;
+    };
+
+    const approval = workflow.options?.approval;
+    const originalSelectAction = approval?.selectAction;
+    if (!approval || !originalSelectAction || !workflow.handleApprovalReady) {
+      return { kind: "blocked", reason: "approval_unavailable" };
+    }
+
+    approval.selectAction = async () => selection;
+    try {
+      return await workflow.handleApprovalReady(ctx);
+    } finally {
+      approval.selectAction = originalSelectAction;
+    }
   }
 
   private getPlanStatusText(): string {

@@ -275,6 +275,28 @@ async function enterExecutionState(harness: ReturnType<typeof createPlanExtensio
   );
 }
 
+async function enterNonUiApprovalState(harness: ReturnType<typeof createPlanExtensionHarness>) {
+  await harness.runCommand("plan", "Investigate flaky prompt extraction");
+
+  const planningPrompt = harness.sentUserMessages[0] ?? "";
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: planningPrompt }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
+}
+
 async function invokeToolCall(
   harness: ReturnType<typeof createPlanExtensionHarness>,
   event: { toolName?: string; input?: unknown },
@@ -292,6 +314,17 @@ async function expectPlanStatus(
   expect(harness.uiStub.notifications.at(-1)).toEqual({
     message,
     level: "info",
+  });
+}
+
+async function expectLatestNonUiStatusMessage(
+  harness: ReturnType<typeof createPlanExtensionHarness>,
+  message: string,
+) {
+  expect(harness.sentMessages.at(-1)).toEqual({
+    customType: "plan-mode-status",
+    content: message,
+    display: true,
   });
 }
 
@@ -664,6 +697,125 @@ test("a second unparseable planning draft stays read-only and fails visibly with
     message: "Couldn't extract plan steps after one automatic retry. Still in read-only plan mode.",
     level: "error",
   });
+});
+
+test("non-ui /plan approve restores normal tools and sends the execution prompt", async () => {
+  const harness = createPlanExtensionHarness();
+
+  await enterNonUiApprovalState(harness);
+
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "AskUserQuestion",
+  ]);
+
+  await harness.runCommand("plan", "approve");
+
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "edit",
+    "write",
+    "AskUserQuestion",
+  ]);
+  expect(harness.sentUserMessages).toHaveLength(2);
+  expect(harness.sentUserMessages[1]).toContain(
+    "Complete only step 1: Add a regression test for prompt leakage",
+  );
+});
+
+test("non-ui /plan continue with a note sends a planning follow-up prompt", async () => {
+  const harness = createPlanExtensionHarness();
+
+  await enterNonUiApprovalState(harness);
+  await harness.runCommand("plan", "continue narrow scope");
+
+  expect(harness.sentUserMessages).toHaveLength(2);
+  expect(harness.sentUserMessages[1]).toContain(
+    "Continue planning from the proposed plan. User note: narrow scope.",
+  );
+  expect(extractRequestId(harness.sentUserMessages[1] ?? "")).toBeTruthy();
+});
+
+test("non-ui /plan regenerate sends a full regenerate prompt", async () => {
+  const harness = createPlanExtensionHarness();
+
+  await enterNonUiApprovalState(harness);
+  await harness.runCommand("plan", "regenerate");
+
+  expect(harness.sentUserMessages).toHaveLength(2);
+  expect(harness.sentUserMessages[1]).toContain(
+    "Regenerate the full plan from scratch. Re-check context and provide a refreshed Plan: section.",
+  );
+  expect(extractRequestId(harness.sentUserMessages[1] ?? "")).toBeTruthy();
+});
+
+test("non-ui /plan exit clears tracked plan state", async () => {
+  const harness = createPlanExtensionHarness();
+
+  await enterNonUiApprovalState(harness);
+  await harness.runCommand("plan", "exit");
+
+  expect(harness.getActiveTools()).toEqual([
+    "read",
+    "bash",
+    "grep",
+    "find",
+    "ls",
+    "edit",
+    "write",
+    "AskUserQuestion",
+  ]);
+
+  await harness.runCommand("plan", "status");
+  await expectLatestNonUiStatusMessage(harness, "Plan mode: OFF (default YOLO mode)");
+
+  await harness.runCommand("todos");
+  await expectLatestNonUiStatusMessage(
+    harness,
+    "No tracked plan steps. Create a plan in /plan mode first.",
+  );
+});
+
+test("non-ui /plan continue without a note shows an error and leaves approval pending", async () => {
+  const harness = createPlanExtensionHarness();
+
+  await enterNonUiApprovalState(harness);
+  await harness.runCommand("plan", "continue");
+
+  expect(harness.sentUserMessages).toHaveLength(1);
+  await expectLatestNonUiStatusMessage(
+    harness,
+    "Usage: /plan continue <note> while approval is pending.",
+  );
+
+  await harness.runCommand("plan", "status");
+  await expectLatestNonUiStatusMessage(harness, "Plan mode: ON (read-only planning)");
+
+  await harness.runCommand("plan", "approve");
+  expect(harness.sentUserMessages).toHaveLength(2);
+  expect(harness.sentUserMessages[1]).toContain(
+    "Complete only step 1: Add a regression test for prompt leakage",
+  );
+});
+
+test("outside approval non-ui /plan commands still behave like normal planning tasks", async () => {
+  const harness = createPlanExtensionHarness();
+
+  await harness.runCommand("plan", "approve");
+
+  expect(harness.sentUserMessages).toHaveLength(1);
+  expect(harness.sentUserMessages[0]).toContain("Task: approve");
+  expect(harness.sentUserMessages[0]).not.toContain(
+    "Plan approved. Switch to implementation mode and execute the latest plan now.",
+  );
 });
 
 test("plan status reflects guided idle and planning phases", async () => {
