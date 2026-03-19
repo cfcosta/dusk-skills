@@ -240,7 +240,7 @@ test("registerPhaseWorkflowExtension resolves prompts and wires workflow handler
       forwarded.push({ type: "command", args, ctx });
       return "command-result";
     },
-    handleToolCall(event: { toolName?: string }) {
+    handleToolCall(event: { toolName?: string; input?: unknown }) {
       forwarded.push({ type: "tool_call", event });
       return "tool-result";
     },
@@ -291,11 +291,14 @@ test("registerPhaseWorkflowExtension resolves prompts and wires workflow handler
   assert.ok(listeners.tool_call);
   assert.ok(listeners.agent_end);
   assert.equal(commands["bug-fix"]?.handler("scope", ctx as never), "command-result");
-  assert.equal(listeners.tool_call?.({ toolName: "Read" }, undefined as never), "tool-result");
+  assert.equal(
+    listeners.tool_call?.({ toolName: "Read", input: { command: "ls -la" } }, undefined as never),
+    "tool-result",
+  );
   assert.equal(listeners.agent_end?.({ messages: ["report"] }, ctx as never), "agent-end-result");
   assert.deepEqual(forwarded, [
     { type: "command", args: "scope", ctx },
-    { type: "tool_call", event: { toolName: "Read" } },
+    { type: "tool_call", event: { toolName: "Read", input: { command: "ls -la" } } },
     { type: "agent_end", event: { messages: ["report"] }, ctx },
   ]);
 });
@@ -478,12 +481,31 @@ test("PhaseWorkflow handles invalid assistant payload with explicit error", asyn
   assert.equal(notifications.at(-1)?.level, "error");
 });
 
-test("PhaseWorkflow allows bash during analysis when the tool name is not write-capable", async () => {
+test("PhaseWorkflow blocks mutating bash during analysis", async () => {
   const { workflow, ctx } = createPhaseWorkflowHarness();
 
   await workflow.handleCommand(undefined, ctx);
 
-  const result = await workflow.handleToolCall({ toolName: "Bash" });
+  const result = await workflow.handleToolCall({
+    toolName: "Bash",
+    input: { command: "rm -rf tmp" },
+  });
+
+  assert.deepEqual(result, {
+    block: true,
+    reason: "Workflow analysis phase blocked a potentially mutating bash command: rm -rf tmp",
+  });
+});
+
+test("PhaseWorkflow allows safe read-only bash during analysis", async () => {
+  const { workflow, ctx } = createPhaseWorkflowHarness();
+
+  await workflow.handleCommand(undefined, ctx);
+
+  const result = await workflow.handleToolCall({
+    toolName: "Bash",
+    input: { command: "ls -la" },
+  });
 
   assert.equal(result, undefined);
 });

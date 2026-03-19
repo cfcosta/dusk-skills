@@ -1,4 +1,5 @@
-import type { ExtensionAPI, ExtensionContext } from "./extension-api";
+import { isSafeReadOnlyCommand as defaultIsSafeReadOnlyCommand } from "./command-safety";
+import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "./extension-api";
 import { extractLastUserText, getLastAssistantTextResult } from "./message-content";
 import type { PromptLoadResult } from "./prompt-loader";
 
@@ -62,6 +63,8 @@ export interface PhaseWorkflowOptions<Prompts> {
   maxEmptyOutputRetries?: number;
   maxRefinementAttempts?: number;
   isWriteCapableTool?: (toolName?: string) => boolean;
+  isSafeReadOnlyCommand?: (command: string) => boolean;
+  bashBlockedReason?: (command: string) => string;
 }
 
 const DEFAULT_MUTATING_TOOL_NAMES = new Set(["edit", "write", "multiedit"]);
@@ -125,9 +128,7 @@ export class PhaseWorkflow<Prompts> {
     return { kind: "ok" };
   }
 
-  async handleToolCall(event: {
-    toolName?: string;
-  }): Promise<{ block: true; reason: string } | void> {
+  async handleToolCall(event: ToolCallEvent): Promise<{ block: true; reason: string } | void> {
     if (!this.isAnalysisPhase(this.state.phase)) {
       return;
     }
@@ -137,6 +138,21 @@ export class PhaseWorkflow<Prompts> {
         block: true,
         reason: this.options.text.analysisWriteBlocked,
       };
+    }
+
+    if (isBashTool(event.toolName)) {
+      const command = extractBashCommand(event.input);
+      const isSafeReadOnlyCommand =
+        this.options.isSafeReadOnlyCommand ?? defaultIsSafeReadOnlyCommand;
+
+      if (!isSafeReadOnlyCommand(command)) {
+        return {
+          block: true,
+          reason:
+            this.options.bashBlockedReason?.(command) ??
+            `Workflow analysis phase blocked a potentially mutating bash command: ${command}`,
+        };
+      }
     }
   }
 
@@ -410,6 +426,19 @@ function isDefaultMutatingToolName(toolName?: string): boolean {
   return DEFAULT_MUTATION_NAME_FRAGMENTS.some((fragment) => {
     return normalizedToolName.includes(fragment);
   });
+}
+
+function isBashTool(toolName?: string): boolean {
+  return (toolName ?? "").trim().toLowerCase() === "bash";
+}
+
+function extractBashCommand(input: unknown): string {
+  if (typeof input !== "object" || input === null) {
+    return "";
+  }
+
+  const command = (input as { command?: unknown }).command;
+  return typeof command === "string" ? command : "";
 }
 
 function normalizeMessage(value: string): string {

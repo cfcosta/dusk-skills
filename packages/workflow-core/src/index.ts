@@ -34,6 +34,7 @@ export type {
   ToolInfo,
   TurnEndEvent,
 } from "./extension-api";
+export { isSafeReadOnlyCommand } from "./command-safety";
 export { PromptLoadError, loadPromptFiles } from "./prompt-loader";
 export type { PromptLoadResult } from "./prompt-loader";
 export { GuidedWorkflow } from "./guided-workflow";

@@ -1,11 +1,11 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI, ExtensionContext } from "./extension-api";
+import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "./extension-api";
 import type { PromptLoadResult } from "./prompt-loader";
 
 export interface PhaseWorkflowController {
   handleCommand(args: unknown, ctx: ExtensionContext): unknown;
-  handleToolCall(event: { toolName?: string }): unknown;
+  handleToolCall(event: ToolCallEvent): unknown;
   handleAgentEnd(event: { messages?: unknown[] }, ctx: ExtensionContext): unknown;
 }
 
@@ -36,7 +36,7 @@ export function registerPhaseWorkflowExtension<Prompts>(
   });
 
   api.on("tool_call", (event) => {
-    return workflow.handleToolCall(event as { toolName?: string });
+    return workflow.handleToolCall(event as ToolCallEvent);
   });
 
   api.on("agent_end", (event, ctx) => {
