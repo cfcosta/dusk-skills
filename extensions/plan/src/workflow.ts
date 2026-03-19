@@ -622,9 +622,7 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       }));
     }
 
-    const completedSteps = executionItems
-      .filter((item) => item.completed)
-      .map((item) => item.step);
+    const completedSteps = executionItems.filter((item) => item.completed).map((item) => item.step);
     markTodoItemsCompleted(structuredTodoItems, completedSteps);
     return structuredTodoItems;
   }
@@ -681,15 +679,9 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     return [
       "[APPROVED PLAN EXECUTION]",
       `Current step: ${currentStep.step}. ${currentDetails.objective}`,
-      currentDetails.targets
-        ? `Target files/components: ${currentDetails.targets}`
-        : undefined,
-      currentDetails.validation
-        ? `Validation method: ${currentDetails.validation}`
-        : undefined,
-      currentDetails.risks
-        ? `Risks and rollback notes: ${currentDetails.risks}`
-        : undefined,
+      currentDetails.targets ? `Target files/components: ${currentDetails.targets}` : undefined,
+      currentDetails.validation ? `Validation method: ${currentDetails.validation}` : undefined,
+      currentDetails.risks ? `Risks and rollback notes: ${currentDetails.risks}` : undefined,
       this.executionConstraintNote
         ? `User execution note: ${this.executionConstraintNote}`
         : undefined,

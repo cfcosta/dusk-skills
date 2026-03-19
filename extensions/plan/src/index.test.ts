@@ -919,12 +919,8 @@ test("execution prompts rehydrate structured step details and DONE markers advan
   expect(harness.sentUserMessages[1]).toContain(
     "Complete only step 2: Update the approval action UI to show a compact summary",
   );
-  expect(harness.sentUserMessages[1]).toContain(
-    "Target files/components: src/plan-action-ui.ts",
-  );
-  expect(harness.sentUserMessages[1]).toContain(
-    "Validation method: bun test ./src/index.test.ts",
-  );
+  expect(harness.sentUserMessages[1]).toContain("Target files/components: src/plan-action-ui.ts");
+  expect(harness.sentUserMessages[1]).toContain("Validation method: bun test ./src/index.test.ts");
   expect(harness.uiStub.statuses.get("plan")).toBe("📋 1/2");
   expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
     "☑ A regression test for prompt leakage",

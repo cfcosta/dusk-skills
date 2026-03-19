@@ -552,7 +552,7 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     }
 
     try {
-      this.api.sendUserMessage(prompt);
+      this.api.sendUserMessage(prompt, { deliverAs: "followUp" });
       return { kind: "ok" };
     } catch {
       ctx.ui.notify(

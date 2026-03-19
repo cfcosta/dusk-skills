@@ -53,6 +53,7 @@ function createContext() {
 
 function createApi() {
   const sentUserMessages: string[] = [];
+  const sentUserMessageOptions: Array<{ deliverAs?: string } | undefined> = [];
   const sentCustomMessages: Array<{
     customType?: string;
     content?: unknown;
@@ -71,13 +72,15 @@ function createApi() {
         deliverAs: options?.deliverAs,
       });
     },
-    sendUserMessage(message) {
+    sendUserMessage(message, options) {
       if (typeof message !== "string") {
         throw new Error("GuidedWorkflow tests expect string prompts");
       }
       sentUserMessages.push(message);
+      sentUserMessageOptions.push(options ? { deliverAs: options.deliverAs } : undefined);
     },
     registerCommand() {},
+    registerTool() {},
     getActiveTools() {
       return ["read", "bash"];
     },
@@ -91,7 +94,7 @@ function createApi() {
     on() {},
   };
 
-  return { api, sentUserMessages, sentCustomMessages };
+  return { api, sentUserMessages, sentUserMessageOptions, sentCustomMessages };
 }
 
 function createCritiqueOptions() {
@@ -974,7 +977,7 @@ test("GuidedWorkflow ignores unrelated execution output when syncing progress", 
 });
 
 test("GuidedWorkflow sends the next execution prompt after completing the current step", async () => {
-  const { api, sentUserMessages } = createApi();
+  const { api, sentUserMessages, sentUserMessageOptions } = createApi();
   const { approval } = createApprovalOptions({
     selection: { action: "approve" },
   });
@@ -1010,6 +1013,7 @@ test("GuidedWorkflow sends the next execution prompt after completing the curren
   );
 
   assert.equal(sentUserMessages[2], "Execute step 2: Second task");
+  assert.deepEqual(sentUserMessageOptions[2], { deliverAs: "followUp" });
   assert.deepEqual(workflow.getExecutionSnapshot(), {
     note: undefined,
     items: [
