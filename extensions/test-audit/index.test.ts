@@ -12,11 +12,17 @@ type NotifyLevel = "info" | "warning" | "error";
 function assertPhaseWorkflowListenerSurface(
   listeners: Record<string, (...args: unknown[]) => Promise<unknown>>,
 ) {
-  assert.deepEqual(Object.keys(listeners).sort(), ["agent_end", "tool_call"]);
+  assert.deepEqual(Object.keys(listeners).sort(), [
+    "agent_end",
+    "session_compact",
+    "session_fork",
+    "session_shutdown",
+    "session_start",
+    "session_switch",
+    "tool_call",
+  ]);
   assert.equal(listeners.before_agent_start, undefined);
   assert.equal(listeners.turn_end, undefined);
-  assert.equal(listeners.session_start, undefined);
-  assert.equal(listeners.session_shutdown, undefined);
 }
 
 function createHarness(options?: {

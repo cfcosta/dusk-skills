@@ -447,7 +447,22 @@ test("PhaseWorkflow reports raw prompt-load failures", async () => {
   assert.deepEqual(notifications.at(-1), { level: "error", message: "load-result-failure" });
 });
 
-test("PhaseWorkflow keeps request-id and prompt-body correlation unchanged", async () => {
+test("PhaseWorkflow accepts matched request ids when the prompt body also matches", async () => {
+  const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness();
+
+  await workflow.handleCommand(undefined, ctx);
+  assert.equal(sentMessages.length, 1);
+
+  const matchedResult = await workflow.handleAgentEnd(
+    createAgentEndEvent(sentMessages[0]!, "finder-report"),
+    ctx,
+  );
+
+  assert.deepEqual(matchedResult, { kind: "ok" });
+  assert.equal(sentMessages.length, 2);
+});
+
+test("PhaseWorkflow rejects mismatched request ids", async () => {
   const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness();
 
   await workflow.handleCommand(undefined, ctx);
@@ -457,21 +472,59 @@ test("PhaseWorkflow keeps request-id and prompt-body correlation unchanged", asy
     createAgentEndEvent(replaceRequestId(sentMessages[0]!, "wf-test-999"), "finder-report"),
     ctx,
   );
+
   assert.deepEqual(wrongRequestResult, { kind: "blocked", reason: "unmatched_agent_end" });
+  assert.equal(sentMessages.length, 1);
+});
+
+test("PhaseWorkflow still rejects mismatched prompt bodies when a user prompt is present", async () => {
+  const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness();
+
+  await workflow.handleCommand(undefined, ctx);
   assert.equal(sentMessages.length, 1);
 
   const wrongPromptResult = await workflow.handleAgentEnd(
     createAgentEndEvent(sentMessages[0]!.replace("finder", "finder-modified"), "finder-report"),
     ctx,
   );
+
   assert.deepEqual(wrongPromptResult, { kind: "blocked", reason: "unmatched_agent_end" });
   assert.equal(sentMessages.length, 1);
+});
 
-  const matchedResult = await workflow.handleAgentEnd(
-    createAgentEndEvent(sentMessages[0]!, "finder-report"),
+test("PhaseWorkflow rejects user prompts that omit the request id marker", async () => {
+  const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness();
+
+  await workflow.handleCommand(undefined, ctx);
+  assert.equal(sentMessages.length, 1);
+
+  const promptWithoutRequestId = sentMessages[0]!.replace(
+    /\n\n<!--\s*workflow-request-id:[^>]+\s*-->/i,
+    "",
+  );
+  const result = await workflow.handleAgentEnd(
+    createAgentEndEvent(promptWithoutRequestId, "finder-report"),
     ctx,
   );
-  assert.deepEqual(matchedResult, { kind: "ok" });
+
+  assert.deepEqual(result, { kind: "blocked", reason: "unmatched_agent_end" });
+  assert.equal(sentMessages.length, 1);
+});
+
+test("PhaseWorkflow allows assistant-only agent_end payloads for compatibility", async () => {
+  const { workflow, ctx, sentMessages } = createPhaseWorkflowHarness();
+
+  await workflow.handleCommand(undefined, ctx);
+  assert.equal(sentMessages.length, 1);
+
+  const result = await workflow.handleAgentEnd(
+    {
+      messages: [{ role: "assistant", content: [{ type: "text", text: "finder-report" }] }],
+    },
+    ctx,
+  );
+
+  assert.deepEqual(result, { kind: "ok" });
   assert.equal(sentMessages.length, 2);
 });
 

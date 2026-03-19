@@ -29,6 +29,13 @@ mock.module("@mariozechner/pi-tui", () => ({
       return [""];
     }
   },
+  Text: class {
+    constructor(private readonly text: string) {}
+
+    render(_width: number) {
+      return [this.text];
+    }
+  },
   Key: {
     tab: "tab",
     escape: "escape",

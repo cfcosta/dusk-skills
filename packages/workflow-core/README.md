@@ -30,6 +30,8 @@ Current repo consumers:
 - `extensions/test-audit`
 - `extensions/refactor`
 
+Current correlation semantics intentionally remain more permissive than `GuidedWorkflow` for compatibility in this pass. `PhaseWorkflow` rejects mismatched request ids, rejects mismatched prompt bodies, and also rejects user prompts that omit the request id marker, but it still accepts assistant-only `agent_end` payloads when no user prompt is present.
+
 ## `GuidedWorkflow`
 
 Use `GuidedWorkflow` when the extension needs a more interactive planning lifecycle than the fixed phase model supports.
