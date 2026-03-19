@@ -438,6 +438,7 @@ export class AskUserQuestionComponent {
   private readonly selections = new Map<string, SelectionState>();
   private readonly editor: Editor;
   private readonly previewMarkdown: Markdown;
+  private _focused = false;
 
   constructor(
     private readonly renderTui: TUI,
@@ -485,6 +486,15 @@ export class AskUserQuestionComponent {
     this.previewMarkdown = new Markdown("", 0, 0, createMarkdownTheme(theme), {
       color: (text: string) => theme.fg("text", text),
     });
+  }
+
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  set focused(value: boolean) {
+    this._focused = value;
+    this.editor.focused = value;
   }
 
   render(width: number): string[] {
@@ -779,6 +789,7 @@ export class AskUserQuestionComponent {
   private enterInputMode(question: NormalizedQuestion): void {
     this.inputMode = true;
     this.inputQuestionId = question.id;
+    this.editor.focused = this._focused;
     this.editor.setText(getSelectionState(this.selections, question.id).customText ?? "");
   }
 

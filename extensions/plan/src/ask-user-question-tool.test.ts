@@ -256,6 +256,76 @@ test("AskUserQuestionComponent caches rendered output per width and invalidates 
   expect(narrow.join("\n")).not.toEqual(wideFirst.join("\n"));
 });
 
+test("AskUserQuestionComponent forwards focus state to the nested editor", () => {
+  const normalized = normalizeQuestions([buildQuestion()]);
+  expect(normalized.ok).toBe(true);
+  if (!normalized.ok) {
+    throw new Error("Expected normalized questions");
+  }
+
+  const component = new AskUserQuestionComponent(
+    createTui() as never,
+    createTheme() as never,
+    () => {},
+    normalized.questions,
+  );
+  const editor = (component as unknown as { editor: { focused: boolean } }).editor;
+
+  component.focused = true;
+  expect(editor.focused).toBe(true);
+
+  component.focused = false;
+  expect(editor.focused).toBe(false);
+});
+
+test("AskUserQuestionComponent keeps the editor focused in custom-answer mode and preserves saved custom answers", () => {
+  const normalized = normalizeQuestions([buildQuestion()]);
+  expect(normalized.ok).toBe(true);
+  if (!normalized.ok) {
+    throw new Error("Expected normalized questions");
+  }
+
+  const normalizedQuestions = normalized.questions;
+  const tool = getRegisteredAskUserQuestionTool();
+  const component = new AskUserQuestionComponent(
+    createTui() as never,
+    createTheme() as never,
+    () => {},
+    normalizedQuestions,
+  );
+  const internals = component as unknown as {
+    editor: { focused: boolean; onSubmit?: (value: string) => void };
+    selections: Map<string, SelectionState>;
+    enterInputMode: (question: (typeof normalizedQuestions)[number]) => void;
+  };
+
+  component.focused = true;
+  internals.enterInputMode(normalizedQuestions[0]!);
+  expect(internals.editor.focused).toBe(true);
+
+  internals.editor.onSubmit?.("Handle it with a custom workflow");
+
+  const details = buildResultDetails(normalizedQuestions, internals.selections, false);
+  expect(details.answers).toEqual({
+    "Which scope should we use?": "Handle it with a custom workflow",
+  });
+  expect(details.annotations).toEqual({
+    "Which scope should we use?": {
+      notes: "Handle it with a custom workflow",
+    },
+  });
+
+  const rendered = tool.renderResult?.(
+    {
+      content: [{ type: "text", text: "unused" }],
+      details,
+    },
+    {},
+    createTheme(),
+  );
+  expect(renderComponentText(rendered!)).toBe("✓ Scope: (wrote) Handle it with a custom workflow");
+});
+
 test("AskUserQuestion renderCall shows a concise questionnaire summary", () => {
   const tool = getRegisteredAskUserQuestionTool();
   const component = tool.renderCall?.({ questions: [buildQuestion(), { ...buildQuestion("Backend"), question: "How broad should the work be?", header: "Breadth" }] }, createTheme());
