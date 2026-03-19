@@ -76,6 +76,9 @@ const SPLIT_PREVIEW_MIN_WIDTH = 96;
 const PREVIEW_PANEL_GAP = 2;
 const PANEL_HORIZONTAL_PADDING = 1;
 
+type AskUserQuestionTheme = ExtensionContext["ui"]["theme"];
+type AskUserQuestionDone = (result: AskUserQuestionResultDetails) => void;
+
 function repeat(char: string, count: number): string {
   return count > 0 ? char.repeat(count) : "";
 }
@@ -373,6 +376,535 @@ export function buildResultContent(details: AskUserQuestionResultDetails): strin
   return `User has answered your questions: ${parts.join(", ")}. You can now continue with the user's answers in mind.`;
 }
 
+export class AskUserQuestionComponent {
+  private currentTab = 0;
+  private optionIndex = 0;
+  private inputMode = false;
+  private inputQuestionId: string | undefined;
+  private cachedWidth: number | undefined;
+  private cachedLines: string[] | undefined;
+  private readonly selections = new Map<string, SelectionState>();
+  private readonly editor: Editor;
+  private readonly previewMarkdown: Markdown;
+
+  constructor(
+    private readonly renderTui: TUI,
+    private readonly theme: AskUserQuestionTheme,
+    private readonly done: AskUserQuestionDone,
+    private readonly questions: NormalizedQuestion[],
+  ) {
+    const editorTheme: EditorTheme = {
+      borderColor: (text) => theme.fg("accent", text),
+      selectList: {
+        selectedPrefix: (text) => theme.fg("accent", text),
+        selectedText: (text) => theme.fg("accent", text),
+        description: (text) => theme.fg("muted", text),
+        scrollInfo: (text) => theme.fg("dim", text),
+        noMatch: (text) => theme.fg("warning", text),
+      },
+    };
+    this.editor = new Editor(renderTui, editorTheme);
+    this.editor.onSubmit = (value) => {
+      const question = this.questions.find((candidate) => candidate.id === this.inputQuestionId);
+      if (!question) {
+        return;
+      }
+
+      const trimmed = value.trim();
+      if (trimmed.length === 0) {
+        this.inputMode = false;
+        this.inputQuestionId = undefined;
+        this.editor.setText("");
+        this.refresh();
+        return;
+      }
+
+      this.saveCustomAnswer(question, trimmed);
+      this.inputMode = false;
+      this.inputQuestionId = undefined;
+      this.editor.setText("");
+      if (!question.multiSelect) {
+        this.advanceAfterAnswer();
+        return;
+      }
+      this.refresh();
+    };
+
+    this.previewMarkdown = new Markdown("", 0, 0, createMarkdownTheme(theme), {
+      color: (text: string) => theme.fg("text", text),
+    });
+  }
+
+  render(width: number): string[] {
+    if (this.cachedLines && this.cachedWidth === width) {
+      return this.cachedLines;
+    }
+
+    const lines: string[] = [];
+    const addLine = (text: string) => {
+      lines.push(truncateToWidth(text, width));
+    };
+
+    addLine(this.theme.fg("accent", "─".repeat(width)));
+
+    if (this.isMultiQuestion()) {
+      const tabs: string[] = ["← "];
+      for (const [index, question] of this.questions.entries()) {
+        const active = index === this.currentTab;
+        const answered = Boolean(
+          getSelectionState(this.selections, question.id).optionLabels.length > 0 ||
+            getSelectionState(this.selections, question.id).customText?.trim(),
+        );
+        const marker = answered ? "■" : "□";
+        const text = ` ${marker} ${question.header} `;
+        tabs.push(
+          this.theme.fg(active ? "accent" : answered ? "success" : "muted", `${text} `),
+        );
+      }
+      const submitActive = this.currentTab === this.questions.length;
+      const canSubmit = this.allAnswered();
+      const submitText = " ✓ Submit ";
+      tabs.push(
+        `${this.theme.fg(submitActive ? "accent" : canSubmit ? "success" : "dim", submitText)}→`,
+      );
+      addLine(` ${tabs.join("")}`);
+      lines.push("");
+    }
+
+    if (this.currentTab === this.questions.length) {
+      addLine(this.theme.fg("accent", " Ready to submit"));
+      lines.push("");
+      for (const question of this.questions) {
+        const selection = getSelectionState(this.selections, question.id);
+        const values = [...selection.optionLabels];
+        if (selection.customText?.trim()) {
+          values.push(`(wrote) ${selection.customText.trim()}`);
+        }
+        if (values.length > 0) {
+          addLine(
+            `${this.theme.fg("muted", ` ${question.header}: `)}${this.theme.fg("text", values.join(", "))}`,
+          );
+        }
+      }
+      lines.push("");
+      if (this.allAnswered()) {
+        addLine(this.theme.fg("success", " Press Enter to submit"));
+      } else {
+        const missing = this.questions
+          .filter((question) => {
+            const selection = getSelectionState(this.selections, question.id);
+            return !(selection.optionLabels.length > 0 || selection.customText?.trim());
+          })
+          .map((question) => question.header)
+          .join(", ");
+        addLine(this.theme.fg("warning", ` Unanswered: ${missing}`));
+      }
+    } else {
+      const question = this.currentQuestion();
+      const option = question?.options[this.optionIndex];
+      if (question) {
+        this.renderQuestionView(width, question, option, lines);
+      }
+    }
+
+    lines.push("");
+    if (this.inputMode) {
+      addLine(this.theme.fg("dim", " Enter to save • Esc to close the editor"));
+    } else if (this.currentTab !== this.questions.length) {
+      const question = this.currentQuestion();
+      const baseHelp = question?.multiSelect
+        ? " ↑↓ navigate • Space toggle • Enter continue • Esc cancel"
+        : " ↑↓ navigate • Enter select • Esc cancel";
+      const fullHelp = this.isMultiQuestion() ? ` Tab/←→ switch •${baseHelp.slice(1)}` : baseHelp;
+      addLine(this.theme.fg("dim", fullHelp));
+    }
+    addLine(this.theme.fg("accent", "─".repeat(width)));
+
+    this.cachedWidth = width;
+    this.cachedLines = lines;
+    return lines;
+  }
+
+  handleInput(data: string): void {
+    if (this.inputMode) {
+      if (matchesKey(data, Key.escape)) {
+        this.inputMode = false;
+        this.inputQuestionId = undefined;
+        this.editor.setText("");
+        this.refresh();
+        return;
+      }
+      this.editor.handleInput(data);
+      this.refresh();
+      return;
+    }
+
+    if (this.isMultiQuestion()) {
+      const totalTabs = this.questions.length + 1;
+      if (matchesKey(data, Key.tab) || matchesKey(data, Key.right)) {
+        this.currentTab = (this.currentTab + 1) % totalTabs;
+        this.optionIndex = 0;
+        this.refresh();
+        return;
+      }
+      if (matchesKey(data, Key.shift("tab")) || matchesKey(data, Key.left)) {
+        this.currentTab = (this.currentTab - 1 + totalTabs) % totalTabs;
+        this.optionIndex = 0;
+        this.refresh();
+        return;
+      }
+    }
+
+    if (this.currentTab === this.questions.length) {
+      if (matchesKey(data, Key.enter) && this.allAnswered()) {
+        this.submit(false);
+        return;
+      }
+      if (matchesKey(data, Key.escape)) {
+        this.submit(true);
+      }
+      return;
+    }
+
+    const question = this.currentQuestion();
+    if (!question) {
+      this.submit(true);
+      return;
+    }
+
+    if (matchesKey(data, Key.up)) {
+      this.optionIndex = Math.max(0, this.optionIndex - 1);
+      this.refresh();
+      return;
+    }
+    if (matchesKey(data, Key.down)) {
+      this.optionIndex = Math.min(question.options.length - 1, this.optionIndex + 1);
+      this.refresh();
+      return;
+    }
+
+    const option = question.options[this.optionIndex];
+    if (!option) {
+      return;
+    }
+
+    if (question.multiSelect && data === " ") {
+      if (option.isOther) {
+        this.enterInputMode(question);
+      } else {
+        this.toggleMultiSelection(question, option, this.optionIndex);
+      }
+      this.refresh();
+      return;
+    }
+
+    if (matchesKey(data, Key.enter)) {
+      if (question.multiSelect) {
+        if (option.isOther) {
+          if (getSelectionState(this.selections, question.id).customText?.trim()) {
+            this.advanceAfterAnswer();
+          } else {
+            this.enterInputMode(question);
+            this.refresh();
+          }
+          return;
+        }
+
+        const selection = getSelectionState(this.selections, question.id);
+        if (selection.optionLabels.length === 0 && !selection.customText?.trim()) {
+          this.toggleMultiSelection(question, option, this.optionIndex);
+        }
+        this.advanceAfterAnswer();
+        return;
+      }
+
+      if (option.isOther) {
+        this.setSingleSelection(question, option, this.optionIndex);
+        this.enterInputMode(question);
+        this.refresh();
+        return;
+      }
+
+      this.setSingleSelection(question, option, this.optionIndex);
+      this.advanceAfterAnswer();
+      return;
+    }
+
+    if (matchesKey(data, Key.escape)) {
+      this.submit(true);
+    }
+  }
+
+  invalidate(): void {
+    this.cachedWidth = undefined;
+    this.cachedLines = undefined;
+  }
+
+  private refresh(): void {
+    this.invalidate();
+    this.renderTui.requestRender();
+  }
+
+  private currentQuestion(): NormalizedQuestion | undefined {
+    return this.questions[this.currentTab];
+  }
+
+  private isMultiQuestion(): boolean {
+    return this.questions.length > 1;
+  }
+
+  private allAnswered(): boolean {
+    return this.questions.every((question) => {
+      const selection = this.selections.get(question.id);
+      return Boolean(
+        selection &&
+          (selection.optionLabels.length > 0 ||
+            (selection.customText && selection.customText.trim())),
+      );
+    });
+  }
+
+  private submit(cancelled: boolean): void {
+    this.done(buildResultDetails(this.questions, this.selections, cancelled));
+  }
+
+  private advanceAfterAnswer(): void {
+    if (!this.isMultiQuestion()) {
+      this.submit(false);
+      return;
+    }
+
+    if (this.currentTab < this.questions.length - 1) {
+      this.currentTab += 1;
+    } else {
+      this.currentTab = this.questions.length;
+    }
+    this.optionIndex = 0;
+    this.refresh();
+  }
+
+  private setSingleSelection(
+    question: NormalizedQuestion,
+    option: NormalizedOption,
+    index: number,
+  ): void {
+    const previous = getSelectionState(this.selections, question.id);
+    this.selections.set(question.id, {
+      optionLabels: option.isOther ? [] : [option.label],
+      optionIndexes: option.isOther ? [] : [index + 1],
+      ...(option.isOther && previous.customText ? { customText: previous.customText } : {}),
+      previews: option.preview ? { [option.label]: option.preview } : {},
+    });
+  }
+
+  private toggleMultiSelection(
+    question: NormalizedQuestion,
+    option: NormalizedOption,
+    index: number,
+  ): void {
+    const selection = getSelectionState(this.selections, question.id);
+    const labelIndex = selection.optionLabels.indexOf(option.label);
+    if (labelIndex >= 0) {
+      selection.optionLabels.splice(labelIndex, 1);
+      selection.optionIndexes.splice(labelIndex, 1);
+      delete selection.previews[option.label];
+    } else {
+      selection.optionLabels.push(option.label);
+      selection.optionIndexes.push(index + 1);
+      if (option.preview) {
+        selection.previews[option.label] = option.preview;
+      }
+    }
+    this.selections.set(question.id, selection);
+  }
+
+  private saveCustomAnswer(question: NormalizedQuestion, value: string): void {
+    const selection = getSelectionState(this.selections, question.id);
+    selection.customText = value;
+    this.selections.set(question.id, selection);
+  }
+
+  private enterInputMode(question: NormalizedQuestion): void {
+    this.inputMode = true;
+    this.inputQuestionId = question.id;
+    this.editor.setText(getSelectionState(this.selections, question.id).customText ?? "");
+  }
+
+  private renderOptionsLines(width: number, question: NormalizedQuestion): string[] {
+    const lines: string[] = [];
+    const selection = getSelectionState(this.selections, question.id);
+
+    for (const [index, option] of question.options.entries()) {
+      const selected = index === this.optionIndex;
+      const prefix = selected ? this.theme.fg("accent", "> ") : "  ";
+      const checked =
+        selection.optionLabels.includes(option.label) ||
+        (option.isOther && Boolean(selection.customText?.trim()));
+      const multiMarker = question.multiSelect ? (checked ? "[x] " : "[ ] ") : "";
+      const optionLabel = option.isOther && this.inputMode ? `${option.label} ✎` : option.label;
+      const color = selected ? "accent" : checked ? "success" : "text";
+
+      lines.push(
+        ...wrapLines(
+          prefix + this.theme.fg(color, `${index + 1}. ${multiMarker}${optionLabel}`),
+          width,
+        ),
+      );
+      if (option.description) {
+        lines.push(...wrapLines(`   ${this.theme.fg("muted", option.description)}`, width));
+      }
+      if (selected && option.preview && width >= 24) {
+        lines.push(...wrapLines(`   ${this.theme.fg("dim", "Preview available →")}`, width));
+      }
+      if (index < question.options.length - 1) {
+        lines.push("");
+      }
+    }
+
+    return lines;
+  }
+
+  private buildSelectionSummaryLines(question: NormalizedQuestion, width: number): string[] {
+    const selection = getSelectionState(this.selections, question.id);
+    const values = [...selection.optionLabels];
+    if (selection.customText?.trim()) {
+      values.push(`(wrote) ${selection.customText.trim()}`);
+    }
+    if (values.length === 0) {
+      return wrapLines(this.theme.fg("dim", "No answer selected yet."), width);
+    }
+    return [
+      ...wrapLines(
+        this.theme.fg("muted", question.multiSelect ? "Current answer" : "Selected answer"),
+        width,
+      ),
+      ...wrapLines(this.theme.fg("text", values.join(", ")), width),
+    ];
+  }
+
+  private renderPreviewBody(
+    width: number,
+    question: NormalizedQuestion,
+    option: NormalizedOption | undefined,
+  ): string[] {
+    const lines: string[] = [];
+    const addWrapped = (text: string) => {
+      lines.push(...wrapLines(text, width));
+    };
+
+    if (this.inputMode) {
+      addWrapped(this.theme.fg("muted", "Write your own answer"));
+      lines.push("");
+      addWrapped(this.theme.fg("dim", "Press Enter to save the answer for this question."));
+      lines.push("");
+      for (const line of this.editor.render(Math.max(1, width))) {
+        lines.push(truncateToWidth(line, width));
+      }
+      return lines;
+    }
+
+    if (!option) {
+      return wrapLines(
+        this.theme.fg("dim", "Move through the options to inspect a preview."),
+        width,
+      );
+    }
+
+    addWrapped(this.theme.fg(option.isOther ? "warning" : "accent", option.label));
+    if (option.description) {
+      lines.push("");
+      addWrapped(this.theme.fg("muted", option.description));
+    }
+
+    const summary = this.buildSelectionSummaryLines(question, width);
+    if (summary.length > 0) {
+      lines.push("");
+      lines.push(...summary);
+    }
+
+    if (option.preview) {
+      lines.push("");
+      addWrapped(this.theme.fg("muted", "Preview"));
+      lines.push("");
+      this.previewMarkdown.setText(option.preview);
+      lines.push(
+        ...this.previewMarkdown
+          .render(Math.max(1, width))
+          .map((line) => truncateToWidth(line, width)),
+      );
+      return lines;
+    }
+
+    lines.push("");
+    if (option.isOther) {
+      addWrapped(
+        this.theme.fg(
+          "dim",
+          "Use this when none of the suggested options fit and you need to describe your own approach.",
+        ),
+      );
+    } else {
+      addWrapped(this.theme.fg("dim", "No structured preview was provided for this option."));
+    }
+    return lines;
+  }
+
+  private renderQuestionView(
+    width: number,
+    question: NormalizedQuestion,
+    option: NormalizedOption | undefined,
+    lines: string[],
+  ): void {
+    lines.push(...wrapLines(this.theme.fg("text", ` ${question.question}`), width));
+    lines.push("");
+
+    const canSplit = width >= SPLIT_PREVIEW_MIN_WIDTH;
+    if (canSplit) {
+      const leftWidth = Math.max(34, Math.floor((width - PREVIEW_PANEL_GAP) * 0.46));
+      const rightWidth = Math.max(34, width - PREVIEW_PANEL_GAP - leftWidth);
+      const leftBodyWidth = Math.max(1, leftWidth - 2 - PANEL_HORIZONTAL_PADDING * 2);
+      const rightBodyWidth = Math.max(1, rightWidth - 2 - PANEL_HORIZONTAL_PADDING * 2);
+      const leftPanel = renderPanel(
+        leftWidth,
+        "Choices",
+        this.renderOptionsLines(leftBodyWidth, question),
+        this.theme,
+        "accent",
+      );
+      const rightPanel = renderPanel(
+        rightWidth,
+        this.inputMode ? "Custom answer" : "Preview",
+        this.renderPreviewBody(rightBodyWidth, question, option),
+        this.theme,
+        this.inputMode ? "warning" : "borderMuted",
+      );
+      lines.push(...joinColumns(leftPanel, rightPanel, leftWidth, rightWidth, PREVIEW_PANEL_GAP));
+      return;
+    }
+
+    const stackedBodyWidth = Math.max(1, width - 2 - PANEL_HORIZONTAL_PADDING * 2);
+    lines.push(
+      ...renderPanel(
+        width,
+        "Choices",
+        this.renderOptionsLines(stackedBodyWidth, question),
+        this.theme,
+        "accent",
+      ),
+    );
+    lines.push("");
+    lines.push(
+      ...renderPanel(
+        width,
+        this.inputMode ? "Custom answer" : "Preview",
+        this.renderPreviewBody(stackedBodyWidth, question, option),
+        this.theme,
+        this.inputMode ? "warning" : "borderMuted",
+      ),
+    );
+  }
+}
+
 export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "AskUserQuestion",
@@ -412,526 +944,7 @@ export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 
       const questions = normalized.questions;
       const result = await ctx.ui.custom<AskUserQuestionResultDetails>((tui, theme, _kb, done) => {
-        const renderTui = tui as TUI;
-        let currentTab = 0;
-        let optionIndex = 0;
-        let inputMode = false;
-        let inputQuestionId: string | undefined;
-        let cachedLines: string[] | undefined;
-        const selections = new Map<string, SelectionState>();
-        const totalTabs = questions.length + 1;
-        const isMultiQuestion = questions.length > 1;
-
-        const editorTheme: EditorTheme = {
-          borderColor: (text) => theme.fg("accent", text),
-          selectList: {
-            selectedPrefix: (text) => theme.fg("accent", text),
-            selectedText: (text) => theme.fg("accent", text),
-            description: (text) => theme.fg("muted", text),
-            scrollInfo: (text) => theme.fg("dim", text),
-            noMatch: (text) => theme.fg("warning", text),
-          },
-        };
-        const editor = new Editor(renderTui, editorTheme);
-
-        const refresh = () => {
-          cachedLines = undefined;
-          renderTui.requestRender();
-        };
-
-        const currentQuestion = (): NormalizedQuestion | undefined => {
-          return questions[currentTab];
-        };
-
-        const allAnswered = (): boolean => {
-          return questions.every((question) => {
-            const selection = selections.get(question.id);
-            return Boolean(
-              selection &&
-              (selection.optionLabels.length > 0 ||
-                (selection.customText && selection.customText.trim())),
-            );
-          });
-        };
-
-        const submit = (cancelled: boolean) => {
-          done(buildResultDetails(questions, selections, cancelled));
-        };
-
-        const advanceAfterAnswer = () => {
-          if (!isMultiQuestion) {
-            submit(false);
-            return;
-          }
-
-          if (currentTab < questions.length - 1) {
-            currentTab += 1;
-          } else {
-            currentTab = questions.length;
-          }
-          optionIndex = 0;
-          refresh();
-        };
-
-        const setSingleSelection = (
-          question: NormalizedQuestion,
-          option: NormalizedOption,
-          index: number,
-        ) => {
-          const previous = getSelectionState(selections, question.id);
-          selections.set(question.id, {
-            optionLabels: option.isOther ? [] : [option.label],
-            optionIndexes: option.isOther ? [] : [index + 1],
-            ...(option.isOther && previous.customText ? { customText: previous.customText } : {}),
-            previews: option.preview ? { [option.label]: option.preview } : {},
-          });
-        };
-
-        const toggleMultiSelection = (
-          question: NormalizedQuestion,
-          option: NormalizedOption,
-          index: number,
-        ) => {
-          const selection = getSelectionState(selections, question.id);
-          const labelIndex = selection.optionLabels.indexOf(option.label);
-          if (labelIndex >= 0) {
-            selection.optionLabels.splice(labelIndex, 1);
-            selection.optionIndexes.splice(labelIndex, 1);
-            delete selection.previews[option.label];
-          } else {
-            selection.optionLabels.push(option.label);
-            selection.optionIndexes.push(index + 1);
-            if (option.preview) {
-              selection.previews[option.label] = option.preview;
-            }
-          }
-          selections.set(question.id, selection);
-        };
-
-        const saveCustomAnswer = (question: NormalizedQuestion, value: string) => {
-          const selection = getSelectionState(selections, question.id);
-          selection.customText = value;
-          selections.set(question.id, selection);
-        };
-
-        const enterInputMode = (question: NormalizedQuestion) => {
-          inputMode = true;
-          inputQuestionId = question.id;
-          editor.setText(getSelectionState(selections, question.id).customText ?? "");
-        };
-
-        editor.onSubmit = (value) => {
-          const question = questions.find((candidate) => candidate.id === inputQuestionId);
-          if (!question) {
-            return;
-          }
-
-          const trimmed = value.trim();
-          if (trimmed.length === 0) {
-            inputMode = false;
-            inputQuestionId = undefined;
-            editor.setText("");
-            refresh();
-            return;
-          }
-
-          saveCustomAnswer(question, trimmed);
-          inputMode = false;
-          inputQuestionId = undefined;
-          editor.setText("");
-          if (!question.multiSelect) {
-            advanceAfterAnswer();
-            return;
-          }
-          refresh();
-        };
-
-        const previewMarkdown = new Markdown("", 0, 0, createMarkdownTheme(theme), {
-          color: (text: string) => theme.fg("text", text),
-        });
-
-        const renderOptionsLines = (width: number, question: NormalizedQuestion): string[] => {
-          const lines: string[] = [];
-          const selection = getSelectionState(selections, question.id);
-
-          for (const [index, option] of question.options.entries()) {
-            const selected = index === optionIndex;
-            const prefix = selected ? theme.fg("accent", "> ") : "  ";
-            const checked =
-              selection.optionLabels.includes(option.label) ||
-              (option.isOther && Boolean(selection.customText?.trim()));
-            const multiMarker = question.multiSelect ? (checked ? "[x] " : "[ ] ") : "";
-            const optionLabel = option.isOther && inputMode ? `${option.label} ✎` : option.label;
-            const color = selected ? "accent" : checked ? "success" : "text";
-
-            lines.push(
-              ...wrapLines(
-                prefix + theme.fg(color, `${index + 1}. ${multiMarker}${optionLabel}`),
-                width,
-              ),
-            );
-            if (option.description) {
-              lines.push(...wrapLines(`   ${theme.fg("muted", option.description)}`, width));
-            }
-            if (selected && option.preview && width >= 24) {
-              lines.push(...wrapLines(`   ${theme.fg("dim", "Preview available →")}`, width));
-            }
-            if (index < question.options.length - 1) {
-              lines.push("");
-            }
-          }
-
-          return lines;
-        };
-
-        const buildSelectionSummaryLines = (
-          question: NormalizedQuestion,
-          width: number,
-        ): string[] => {
-          const selection = getSelectionState(selections, question.id);
-          const values = [...selection.optionLabels];
-          if (selection.customText?.trim()) {
-            values.push(`(wrote) ${selection.customText.trim()}`);
-          }
-          if (values.length === 0) {
-            return wrapLines(theme.fg("dim", "No answer selected yet."), width);
-          }
-          return [
-            ...wrapLines(
-              theme.fg("muted", question.multiSelect ? "Current answer" : "Selected answer"),
-              width,
-            ),
-            ...wrapLines(theme.fg("text", values.join(", ")), width),
-          ];
-        };
-
-        const renderPreviewBody = (
-          width: number,
-          question: NormalizedQuestion,
-          option: NormalizedOption | undefined,
-        ): string[] => {
-          const lines: string[] = [];
-          const addWrapped = (text: string) => {
-            lines.push(...wrapLines(text, width));
-          };
-
-          if (inputMode) {
-            addWrapped(theme.fg("muted", "Write your own answer"));
-            lines.push("");
-            addWrapped(theme.fg("dim", "Press Enter to save the answer for this question."));
-            lines.push("");
-            for (const line of editor.render(Math.max(1, width))) {
-              lines.push(truncateToWidth(line, width));
-            }
-            return lines;
-          }
-
-          if (!option) {
-            return wrapLines(
-              theme.fg("dim", "Move through the options to inspect a preview."),
-              width,
-            );
-          }
-
-          addWrapped(theme.fg(option.isOther ? "warning" : "accent", option.label));
-          if (option.description) {
-            lines.push("");
-            addWrapped(theme.fg("muted", option.description));
-          }
-
-          const summary = buildSelectionSummaryLines(question, width);
-          if (summary.length > 0) {
-            lines.push("");
-            lines.push(...summary);
-          }
-
-          if (option.preview) {
-            lines.push("");
-            addWrapped(theme.fg("muted", "Preview"));
-            lines.push("");
-            previewMarkdown.setText(option.preview);
-            lines.push(
-              ...previewMarkdown
-                .render(Math.max(1, width))
-                .map((line) => truncateToWidth(line, width)),
-            );
-            return lines;
-          }
-
-          lines.push("");
-          if (option.isOther) {
-            addWrapped(
-              theme.fg(
-                "dim",
-                "Use this when none of the suggested options fit and you need to describe your own approach.",
-              ),
-            );
-          } else {
-            addWrapped(theme.fg("dim", "No structured preview was provided for this option."));
-          }
-          return lines;
-        };
-
-        const renderQuestionView = (
-          width: number,
-          question: NormalizedQuestion,
-          option: NormalizedOption | undefined,
-          lines: string[],
-        ) => {
-          lines.push(...wrapLines(theme.fg("text", ` ${question.question}`), width));
-          lines.push("");
-
-          const canSplit = width >= SPLIT_PREVIEW_MIN_WIDTH;
-          if (canSplit) {
-            const leftWidth = Math.max(34, Math.floor((width - PREVIEW_PANEL_GAP) * 0.46));
-            const rightWidth = Math.max(34, width - PREVIEW_PANEL_GAP - leftWidth);
-            const leftBodyWidth = Math.max(1, leftWidth - 2 - PANEL_HORIZONTAL_PADDING * 2);
-            const rightBodyWidth = Math.max(1, rightWidth - 2 - PANEL_HORIZONTAL_PADDING * 2);
-            const leftPanel = renderPanel(
-              leftWidth,
-              "Choices",
-              renderOptionsLines(leftBodyWidth, question),
-              theme,
-              "accent",
-            );
-            const rightPanel = renderPanel(
-              rightWidth,
-              inputMode ? "Custom answer" : "Preview",
-              renderPreviewBody(rightBodyWidth, question, option),
-              theme,
-              inputMode ? "warning" : "borderMuted",
-            );
-            lines.push(
-              ...joinColumns(leftPanel, rightPanel, leftWidth, rightWidth, PREVIEW_PANEL_GAP),
-            );
-            return;
-          }
-
-          const stackedBodyWidth = Math.max(1, width - 2 - PANEL_HORIZONTAL_PADDING * 2);
-          lines.push(
-            ...renderPanel(
-              width,
-              "Choices",
-              renderOptionsLines(stackedBodyWidth, question),
-              theme,
-              "accent",
-            ),
-          );
-          lines.push("");
-          lines.push(
-            ...renderPanel(
-              width,
-              inputMode ? "Custom answer" : "Preview",
-              renderPreviewBody(stackedBodyWidth, question, option),
-              theme,
-              inputMode ? "warning" : "borderMuted",
-            ),
-          );
-        };
-
-        const handleInput = (data: string) => {
-          if (inputMode) {
-            if (matchesKey(data, Key.escape)) {
-              inputMode = false;
-              inputQuestionId = undefined;
-              editor.setText("");
-              refresh();
-              return;
-            }
-            editor.handleInput(data);
-            refresh();
-            return;
-          }
-
-          if (isMultiQuestion) {
-            if (matchesKey(data, Key.tab) || matchesKey(data, Key.right)) {
-              currentTab = (currentTab + 1) % totalTabs;
-              optionIndex = 0;
-              refresh();
-              return;
-            }
-            if (matchesKey(data, Key.shift("tab")) || matchesKey(data, Key.left)) {
-              currentTab = (currentTab - 1 + totalTabs) % totalTabs;
-              optionIndex = 0;
-              refresh();
-              return;
-            }
-          }
-
-          if (currentTab === questions.length) {
-            if (matchesKey(data, Key.enter) && allAnswered()) {
-              submit(false);
-              return;
-            }
-            if (matchesKey(data, Key.escape)) {
-              submit(true);
-            }
-            return;
-          }
-
-          const question = currentQuestion();
-          if (!question) {
-            submit(true);
-            return;
-          }
-
-          if (matchesKey(data, Key.up)) {
-            optionIndex = Math.max(0, optionIndex - 1);
-            refresh();
-            return;
-          }
-          if (matchesKey(data, Key.down)) {
-            optionIndex = Math.min(question.options.length - 1, optionIndex + 1);
-            refresh();
-            return;
-          }
-
-          const option = question.options[optionIndex];
-          if (!option) {
-            return;
-          }
-
-          if (question.multiSelect && data === " ") {
-            if (option.isOther) {
-              enterInputMode(question);
-            } else {
-              toggleMultiSelection(question, option, optionIndex);
-            }
-            refresh();
-            return;
-          }
-
-          if (matchesKey(data, Key.enter)) {
-            if (question.multiSelect) {
-              if (option.isOther) {
-                if (getSelectionState(selections, question.id).customText?.trim()) {
-                  advanceAfterAnswer();
-                } else {
-                  enterInputMode(question);
-                  refresh();
-                }
-                return;
-              }
-
-              const selection = getSelectionState(selections, question.id);
-              if (selection.optionLabels.length === 0 && !selection.customText?.trim()) {
-                toggleMultiSelection(question, option, optionIndex);
-              }
-              advanceAfterAnswer();
-              return;
-            }
-
-            if (option.isOther) {
-              setSingleSelection(question, option, optionIndex);
-              enterInputMode(question);
-              refresh();
-              return;
-            }
-
-            setSingleSelection(question, option, optionIndex);
-            advanceAfterAnswer();
-            return;
-          }
-
-          if (matchesKey(data, Key.escape)) {
-            submit(true);
-          }
-        };
-
-        const render = (width: number): string[] => {
-          if (cachedLines) {
-            return cachedLines;
-          }
-
-          const lines: string[] = [];
-          const addLine = (text: string) => {
-            lines.push(truncateToWidth(text, width));
-          };
-
-          addLine(theme.fg("accent", "─".repeat(width)));
-
-          if (isMultiQuestion) {
-            const tabs: string[] = ["← "];
-            for (const [index, question] of questions.entries()) {
-              const active = index === currentTab;
-              const answered = Boolean(
-                getSelectionState(selections, question.id).optionLabels.length > 0 ||
-                getSelectionState(selections, question.id).customText?.trim(),
-              );
-              const marker = answered ? "■" : "□";
-              const text = ` ${marker} ${question.header} `;
-              tabs.push(theme.fg(active ? "accent" : answered ? "success" : "muted", `${text} `));
-            }
-            const submitActive = currentTab === questions.length;
-            const canSubmit = allAnswered();
-            const submitText = " ✓ Submit ";
-            tabs.push(
-              `${theme.fg(submitActive ? "accent" : canSubmit ? "success" : "dim", submitText)}→`,
-            );
-            addLine(` ${tabs.join("")}`);
-            lines.push("");
-          }
-
-          if (currentTab === questions.length) {
-            addLine(theme.fg("accent", " Ready to submit"));
-            lines.push("");
-            for (const question of questions) {
-              const selection = getSelectionState(selections, question.id);
-              const values = [...selection.optionLabels];
-              if (selection.customText?.trim()) {
-                values.push(`(wrote) ${selection.customText.trim()}`);
-              }
-              if (values.length > 0) {
-                addLine(
-                  `${theme.fg("muted", ` ${question.header}: `)}${theme.fg("text", values.join(", "))}`,
-                );
-              }
-            }
-            lines.push("");
-            if (allAnswered()) {
-              addLine(theme.fg("success", " Press Enter to submit"));
-            } else {
-              const missing = questions
-                .filter((question) => {
-                  const selection = getSelectionState(selections, question.id);
-                  return !(selection.optionLabels.length > 0 || selection.customText?.trim());
-                })
-                .map((question) => question.header)
-                .join(", ");
-              addLine(theme.fg("warning", ` Unanswered: ${missing}`));
-            }
-          } else {
-            const question = currentQuestion();
-            const option = question?.options[optionIndex];
-            if (question) {
-              renderQuestionView(width, question, option, lines);
-            }
-          }
-
-          lines.push("");
-          if (inputMode) {
-            addLine(theme.fg("dim", " Enter to save • Esc to close the editor"));
-          } else if (currentTab !== questions.length) {
-            const question = currentQuestion();
-            const baseHelp = question?.multiSelect
-              ? " ↑↓ navigate • Space toggle • Enter continue • Esc cancel"
-              : " ↑↓ navigate • Enter select • Esc cancel";
-            const fullHelp = isMultiQuestion ? ` Tab/←→ switch •${baseHelp.slice(1)}` : baseHelp;
-            addLine(theme.fg("dim", fullHelp));
-          }
-          addLine(theme.fg("accent", "─".repeat(width)));
-
-          cachedLines = lines;
-          return lines;
-        };
-
-        return {
-          render,
-          invalidate: () => {
-            cachedLines = undefined;
-          },
-          handleInput,
-        };
+        return new AskUserQuestionComponent(tui as TUI, theme, done, questions);
       });
 
       const contentText = buildResultContent(result);

@@ -47,9 +47,28 @@ mock.module("@mariozechner/pi-tui", () => ({
   wrapTextWithAnsi: (text: string) => [text],
 }));
 
-const { normalizeQuestions, buildResultDetails, buildResultContent } = await import(
-  "./ask-user-question-tool"
-);
+const {
+  AskUserQuestionComponent,
+  normalizeQuestions,
+  buildResultDetails,
+  buildResultContent,
+} = await import("./ask-user-question-tool");
+
+function createTheme() {
+  return {
+    fg: (_color: string, text: string) => text,
+    strikethrough: (text: string) => text,
+  };
+}
+
+function createTui() {
+  return {
+    requestRenderCalls: 0,
+    requestRender() {
+      this.requestRenderCalls += 1;
+    },
+  };
+}
 
 function buildQuestion(label = "Repo local"): AskUserQuestionQuestionConfig {
   return {
@@ -136,6 +155,73 @@ test("normalizeQuestions injects the Type something. option", () => {
     description: "Write your own answer instead of choosing one of the suggested options.",
     isOther: true,
   });
+});
+
+test("AskUserQuestionComponent uses the split layout on wide renders", () => {
+  const normalized = normalizeQuestions([buildQuestion()]);
+  expect(normalized.ok).toBe(true);
+  if (!normalized.ok) {
+    throw new Error("Expected normalized questions");
+  }
+
+  const component = new AskUserQuestionComponent(
+    createTui() as never,
+    createTheme() as never,
+    () => {},
+    normalized.questions,
+  );
+
+  const wideLines = component.render(120);
+
+  expect(wideLines.some((line) => line.includes("Choices") && line.includes("Preview"))).toBe(true);
+  expect(wideLines.some((line) => (line.match(/┌/g)?.length ?? 0) >= 2)).toBe(true);
+});
+
+test("AskUserQuestionComponent uses the stacked layout on narrow renders", () => {
+  const normalized = normalizeQuestions([buildQuestion()]);
+  expect(normalized.ok).toBe(true);
+  if (!normalized.ok) {
+    throw new Error("Expected normalized questions");
+  }
+
+  const component = new AskUserQuestionComponent(
+    createTui() as never,
+    createTheme() as never,
+    () => {},
+    normalized.questions,
+  );
+
+  const narrowLines = component.render(80);
+
+  expect(narrowLines.some((line) => line.includes("Choices") && line.includes("Preview"))).toBe(
+    false,
+  );
+  expect(narrowLines.some((line) => line.includes("Choices"))).toBe(true);
+  expect(narrowLines.some((line) => line.includes("Preview"))).toBe(true);
+  expect(narrowLines.some((line) => (line.match(/┌/g)?.length ?? 0) >= 2)).toBe(false);
+});
+
+test("AskUserQuestionComponent caches rendered output per width and invalidates on width changes", () => {
+  const normalized = normalizeQuestions([buildQuestion()]);
+  expect(normalized.ok).toBe(true);
+  if (!normalized.ok) {
+    throw new Error("Expected normalized questions");
+  }
+
+  const component = new AskUserQuestionComponent(
+    createTui() as never,
+    createTheme() as never,
+    () => {},
+    normalized.questions,
+  );
+
+  const wideFirst = component.render(120);
+  const wideSecond = component.render(120);
+  const narrow = component.render(80);
+
+  expect(wideSecond).toBe(wideFirst);
+  expect(narrow).not.toBe(wideFirst);
+  expect(narrow.join("\n")).not.toEqual(wideFirst.join("\n"));
 });
 
 test("buildResultDetails formats answers, annotations, and strips the injected other option", () => {
