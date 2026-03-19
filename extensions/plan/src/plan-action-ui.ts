@@ -1,5 +1,12 @@
 import type { ExtensionUIContext } from "@mariozechner/pi-coding-agent";
-import { Editor, type EditorTheme, Key, matchesKey, truncateToWidth } from "@mariozechner/pi-tui";
+import {
+  Editor,
+  type EditorTheme,
+  Key,
+  matchesKey,
+  type TUI,
+  truncateToWidth,
+} from "@mariozechner/pi-tui";
 
 export type PlanNextAction = "approve" | "continue" | "regenerate" | "exit";
 
@@ -23,6 +30,10 @@ export interface PlanNextActionResult {
   action?: PlanNextAction;
   note?: string;
 }
+
+type PlanActionTheme = ExtensionUIContext["theme"];
+
+type PlanActionDone = (result: PlanNextActionResult) => void;
 
 const ACTION_OPTIONS: ReadonlyArray<{ label: string; value: PlanNextAction }> = [
   { label: "Approve and execute now", value: "approve" },
@@ -78,16 +89,20 @@ function isPlainKey(data: string, key: string): boolean {
   return data.length === 1 && data.toLowerCase() === key;
 }
 
-export async function selectPlanNextActionWithInlineNote(
-  ui: ExtensionUIContext,
-  details?: PlanApprovalDetails,
-): Promise<PlanNextActionResult> {
-  return ui.custom<PlanNextActionResult>((tui, theme, _keybindings, done) => {
-    let cursorIndex = 0;
-    let editingAction: PlanNextAction | undefined;
-    let notesByAction: Partial<Record<PlanNextAction, string>> = {};
-    let cachedRenderedLines: string[] | undefined;
+export class PlanActionComponent {
+  private cursorIndex = 0;
+  private editingAction: PlanNextAction | undefined;
+  private notesByAction: Partial<Record<PlanNextAction, string>> = {};
+  private cachedWidth: number | undefined;
+  private cachedRenderedLines: string[] | undefined;
+  private readonly noteEditor: Editor;
 
+  constructor(
+    private readonly tui: TUI,
+    private readonly theme: PlanActionTheme,
+    private readonly done: PlanActionDone,
+    private readonly details?: PlanApprovalDetails,
+  ) {
     const editorTheme: EditorTheme = {
       borderColor: (text) => theme.fg("accent", text),
       selectList: {
@@ -98,218 +113,228 @@ export async function selectPlanNextActionWithInlineNote(
         noMatch: (text) => theme.fg("warning", text),
       },
     };
-    const noteEditor = new Editor(tui, editorTheme);
 
-    const requestUiRerender = () => {
-      cachedRenderedLines = undefined;
-      tui.requestRender();
-    };
-
-    const getSelectedAction = (): PlanNextAction => ACTION_OPTIONS[cursorIndex]?.value ?? "approve";
-
-    const getNormalizedNote = (action: PlanNextAction): string =>
-      normalizeNote(notesByAction[action] ?? "");
-
-    const openNoteEditor = (action: PlanNextAction) => {
-      if (!EDITABLE_ACTIONS.has(action)) {
-        return;
-      }
-      editingAction = action;
-      noteEditor.setText(notesByAction[action] ?? "");
-      requestUiRerender();
-    };
-
-    noteEditor.onChange = (value) => {
-      if (!editingAction) {
-        return;
-      }
-      notesByAction = { ...notesByAction, [editingAction]: value };
-      requestUiRerender();
-    };
-
-    noteEditor.onSubmit = (value) => {
-      if (!editingAction) {
+    this.noteEditor = new Editor(tui, editorTheme);
+    this.noteEditor.onChange = (value) => {
+      if (!this.editingAction) {
         return;
       }
 
-      const action = editingAction;
-      notesByAction = { ...notesByAction, [action]: value };
-      const normalized = getNormalizedNote(action);
+      this.notesByAction = { ...this.notesByAction, [this.editingAction]: value };
+      this.requestUiRerender();
+    };
+
+    this.noteEditor.onSubmit = (value) => {
+      if (!this.editingAction) {
+        return;
+      }
+
+      const action = this.editingAction;
+      this.notesByAction = { ...this.notesByAction, [action]: value };
+      const normalized = this.getNormalizedNote(action);
       if (normalized.length === 0) {
-        editingAction = undefined;
-        requestUiRerender();
+        this.editingAction = undefined;
+        this.requestUiRerender();
         return;
       }
 
-      done({
+      this.done({
         cancelled: false,
         action,
         note: normalized,
       });
     };
+  }
 
-    const render = (width: number): string[] => {
-      if (cachedRenderedLines) {
-        return cachedRenderedLines;
+  render(width: number): string[] {
+    if (this.cachedRenderedLines && this.cachedWidth === width) {
+      return this.cachedRenderedLines;
+    }
+
+    const renderedLines: string[] = [];
+    const addLine = (line = "") => renderedLines.push(truncateToWidth(line, width));
+
+    addLine(this.theme.fg("accent", "─".repeat(width)));
+    addLine(this.theme.fg("text", " Plan mode: next action"));
+    addLine();
+
+    if (this.details) {
+      addLine(
+        this.theme.fg(
+          "muted",
+          ` Review summary • ${this.details.stepCount} step${this.details.stepCount === 1 ? "" : "s"}`,
+        ),
+      );
+      for (const step of this.details.previewSteps.slice(0, 3)) {
+        addLine(this.theme.fg("text", `  • ${step.step}. ${step.label}`));
+        if (step.targetsSummary) {
+          addLine(this.theme.fg("dim", `    files: ${step.targetsSummary}`));
+        }
+        if (step.validationSummary) {
+          addLine(this.theme.fg("dim", `    validate: ${step.validationSummary}`));
+        }
+      }
+      if (this.details.previewSteps.length === 0) {
+        addLine(this.theme.fg("dim", "  • No extracted steps available"));
       }
 
-      const renderedLines: string[] = [];
-      const addLine = (line = "") => renderedLines.push(truncateToWidth(line, width));
-
-      addLine(theme.fg("accent", "─".repeat(width)));
-      addLine(theme.fg("text", " Plan mode: next action"));
+      const badges = [
+        ...(this.details.wasRevised ? ["revised after critique"] : []),
+        ...(this.details.badges ?? []),
+      ];
+      if (badges.length > 0) {
+        addLine(this.theme.fg("dim", ` Badges: ${badges.join(" • ")}`));
+      }
+      if (this.details.critiqueSummary) {
+        addLine(this.theme.fg("dim", ` Critique: ${this.details.critiqueSummary}`));
+      }
       addLine();
+    }
 
-      if (details) {
-        addLine(
-          theme.fg(
-            "muted",
-            ` Review summary • ${details.stepCount} step${details.stepCount === 1 ? "" : "s"}`,
-          ),
-        );
-        for (const step of details.previewSteps.slice(0, 3)) {
-          addLine(theme.fg("text", `  • ${step.step}. ${step.label}`));
-          if (step.targetsSummary) {
-            addLine(theme.fg("dim", `    files: ${step.targetsSummary}`));
-          }
-          if (step.validationSummary) {
-            addLine(theme.fg("dim", `    validate: ${step.validationSummary}`));
-          }
-        }
-        if (details.previewSteps.length === 0) {
-          addLine(theme.fg("dim", "  • No extracted steps available"));
-        }
+    const maxInlineLabelLength = Math.max(20, width - 8);
+    for (let optionIndex = 0; optionIndex < ACTION_OPTIONS.length; optionIndex++) {
+      const option = ACTION_OPTIONS[optionIndex];
+      const isCursorOption = optionIndex === this.cursorIndex;
+      const isEditingThisOption = this.editingAction === option.value && isCursorOption;
+      const optionLabel = EDITABLE_ACTIONS.has(option.value)
+        ? buildActionOptionLabel(
+            option.label,
+            this.notesByAction[option.value] ?? "",
+            isEditingThisOption,
+            maxInlineLabelLength,
+          )
+        : option.label;
+      const cursorPrefix = isCursorOption ? this.theme.fg("accent", "→ ") : "  ";
+      const bullet = isCursorOption ? "●" : "○";
+      const optionColor = isCursorOption ? "accent" : "text";
+      addLine(`${cursorPrefix}${this.theme.fg(optionColor, `${bullet} ${optionLabel}`)}`);
+    }
 
-        const badges = [
-          ...(details.wasRevised ? ["revised after critique"] : []),
-          ...(details.badges ?? []),
-        ];
-        if (badges.length > 0) {
-          addLine(theme.fg("dim", ` Badges: ${badges.join(" • ")}`));
-        }
-        if (details.critiqueSummary) {
-          addLine(theme.fg("dim", ` Critique: ${details.critiqueSummary}`));
-        }
-        addLine();
-      }
+    addLine();
+    addLine(this.theme.fg("dim", ` ${ACTION_DESCRIPTIONS[this.getSelectedAction()]}`));
+    addLine();
 
-      const maxInlineLabelLength = Math.max(20, width - 8);
-      for (let optionIndex = 0; optionIndex < ACTION_OPTIONS.length; optionIndex++) {
-        const option = ACTION_OPTIONS[optionIndex];
-        const isCursorOption = optionIndex === cursorIndex;
-        const isEditingThisOption = editingAction === option.value && isCursorOption;
-        const optionLabel = EDITABLE_ACTIONS.has(option.value)
-          ? buildActionOptionLabel(
-              option.label,
-              notesByAction[option.value] ?? "",
-              isEditingThisOption,
-              maxInlineLabelLength,
-            )
-          : option.label;
-        const cursorPrefix = isCursorOption ? theme.fg("accent", "→ ") : "  ";
-        const bullet = isCursorOption ? "●" : "○";
-        const optionColor = isCursorOption ? "accent" : "text";
-        addLine(`${cursorPrefix}${theme.fg(optionColor, `${bullet} ${optionLabel}`)}`);
-      }
+    if (this.editingAction) {
+      addLine(this.theme.fg("dim", " Typing note inline • Enter submit • Tab/Esc stop editing"));
+    } else if (EDITABLE_ACTIONS.has(this.getSelectedAction())) {
+      const selectedAction = this.getSelectedAction();
+      const actionVerb =
+        this.getNormalizedNote(selectedAction).length > 0 ? "edit note" : "add note";
+      addLine(
+        this.theme.fg(
+          "dim",
+          " ↑↓ move • Enter select • A/C/R/X quick actions • E or Tab " +
+            actionVerb +
+            " • Esc cancel",
+        ),
+      );
+    } else {
+      addLine(this.theme.fg("dim", " ↑↓ move • Enter select • A/C/R/X quick actions • Esc cancel"));
+    }
 
-      addLine();
-      addLine(theme.fg("dim", ` ${ACTION_DESCRIPTIONS[getSelectedAction()]}`));
-      addLine();
+    addLine(this.theme.fg("accent", "─".repeat(width)));
+    this.cachedWidth = width;
+    this.cachedRenderedLines = renderedLines;
+    return renderedLines;
+  }
 
-      if (editingAction) {
-        addLine(theme.fg("dim", " Typing note inline • Enter submit • Tab/Esc stop editing"));
-      } else if (EDITABLE_ACTIONS.has(getSelectedAction())) {
-        const selectedAction = getSelectedAction();
-        const actionVerb = getNormalizedNote(selectedAction).length > 0 ? "edit note" : "add note";
-        addLine(
-          theme.fg(
-            "dim",
-            " ↑↓ move • Enter select • A/C/R/X quick actions • E or Tab " +
-              actionVerb +
-              " • Esc cancel",
-          ),
-        );
-      } else {
-        addLine(theme.fg("dim", " ↑↓ move • Enter select • A/C/R/X quick actions • Esc cancel"));
-      }
-
-      addLine(theme.fg("accent", "─".repeat(width)));
-      cachedRenderedLines = renderedLines;
-      return renderedLines;
-    };
-
-    const handleInput = (data: string) => {
-      if (editingAction) {
-        if (matchesKey(data, Key.tab) || matchesKey(data, Key.escape)) {
-          editingAction = undefined;
-          requestUiRerender();
-          return;
-        }
-        noteEditor.handleInput(data);
-        requestUiRerender();
+  handleInput(data: string): void {
+    if (this.editingAction) {
+      if (matchesKey(data, Key.tab) || matchesKey(data, Key.escape)) {
+        this.editingAction = undefined;
+        this.requestUiRerender();
         return;
       }
+      this.noteEditor.handleInput(data);
+      this.requestUiRerender();
+      return;
+    }
 
-      if (matchesKey(data, Key.up) || isPlainKey(data, "k")) {
-        cursorIndex = Math.max(0, cursorIndex - 1);
-        requestUiRerender();
-        return;
-      }
+    if (matchesKey(data, Key.up) || isPlainKey(data, "k")) {
+      this.cursorIndex = Math.max(0, this.cursorIndex - 1);
+      this.requestUiRerender();
+      return;
+    }
 
-      if (matchesKey(data, Key.down) || isPlainKey(data, "j")) {
-        cursorIndex = Math.min(ACTION_OPTIONS.length - 1, cursorIndex + 1);
-        requestUiRerender();
-        return;
-      }
+    if (matchesKey(data, Key.down) || isPlainKey(data, "j")) {
+      this.cursorIndex = Math.min(ACTION_OPTIONS.length - 1, this.cursorIndex + 1);
+      this.requestUiRerender();
+      return;
+    }
 
-      if (matchesKey(data, Key.tab) || isPlainKey(data, "e")) {
-        openNoteEditor(getSelectedAction());
-        return;
-      }
+    if (matchesKey(data, Key.tab) || isPlainKey(data, "e")) {
+      this.openNoteEditor(this.getSelectedAction());
+      return;
+    }
 
-      const quickAction = isPlainKey(data, "a")
-        ? "approve"
-        : isPlainKey(data, "c")
-          ? "continue"
-          : isPlainKey(data, "r")
-            ? "regenerate"
-            : isPlainKey(data, "x")
-              ? "exit"
-              : undefined;
-      if (quickAction) {
-        done({
-          cancelled: false,
-          action: quickAction,
-          note: EDITABLE_ACTIONS.has(quickAction)
-            ? getNormalizedNote(quickAction) || undefined
-            : undefined,
-        });
-        return;
-      }
+    const quickAction = isPlainKey(data, "a")
+      ? "approve"
+      : isPlainKey(data, "c")
+        ? "continue"
+        : isPlainKey(data, "r")
+          ? "regenerate"
+          : isPlainKey(data, "x")
+            ? "exit"
+            : undefined;
+    if (quickAction) {
+      this.done({
+        cancelled: false,
+        action: quickAction,
+        note: EDITABLE_ACTIONS.has(quickAction)
+          ? this.getNormalizedNote(quickAction) || undefined
+          : undefined,
+      });
+      return;
+    }
 
-      if (matchesKey(data, Key.enter)) {
-        const selected = getSelectedAction();
-        done({
-          cancelled: false,
-          action: selected,
-          note: EDITABLE_ACTIONS.has(selected)
-            ? getNormalizedNote(selected) || undefined
-            : undefined,
-        });
-        return;
-      }
+    if (matchesKey(data, Key.enter)) {
+      const selected = this.getSelectedAction();
+      this.done({
+        cancelled: false,
+        action: selected,
+        note: EDITABLE_ACTIONS.has(selected) ? this.getNormalizedNote(selected) || undefined : undefined,
+      });
+      return;
+    }
 
-      if (matchesKey(data, Key.escape)) {
-        done({ cancelled: true });
-      }
-    };
+    if (matchesKey(data, Key.escape)) {
+      this.done({ cancelled: true });
+    }
+  }
 
-    return {
-      render,
-      invalidate: () => {
-        cachedRenderedLines = undefined;
-      },
-      handleInput,
-    };
+  invalidate(): void {
+    this.cachedWidth = undefined;
+    this.cachedRenderedLines = undefined;
+  }
+
+  private requestUiRerender(): void {
+    this.invalidate();
+    this.tui.requestRender();
+  }
+
+  private getSelectedAction(): PlanNextAction {
+    return ACTION_OPTIONS[this.cursorIndex]?.value ?? "approve";
+  }
+
+  private getNormalizedNote(action: PlanNextAction): string {
+    return normalizeNote(this.notesByAction[action] ?? "");
+  }
+
+  private openNoteEditor(action: PlanNextAction): void {
+    if (!EDITABLE_ACTIONS.has(action)) {
+      return;
+    }
+    this.editingAction = action;
+    this.noteEditor.setText(this.notesByAction[action] ?? "");
+    this.requestUiRerender();
+  }
+}
+
+export async function selectPlanNextActionWithInlineNote(
+  ui: ExtensionUIContext,
+  details?: PlanApprovalDetails,
+): Promise<PlanNextActionResult> {
+  return ui.custom<PlanNextActionResult>((tui, theme, _keybindings, done) => {
+    return new PlanActionComponent(tui as TUI, theme, done, details);
   });
 }
