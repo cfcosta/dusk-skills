@@ -252,18 +252,16 @@ export class PiPlanWorkflow extends GuidedWorkflow {
   }
 
   async handleTodosCommand(_args: unknown, ctx: ExtensionContext): Promise<void> {
-    const todoItems = this.getTodosItemsFromGuidedState();
-    if (todoItems.length === 0) {
+    const progress = this.getExecutionProgressView();
+    if (progress.totalSteps === 0) {
       notify(this.pi, ctx, "No tracked plan steps. Create a plan in /plan mode first.", "info");
       return;
     }
 
-    const completed = todoItems.filter((item) => item.completed).length;
-    const progress = `${completed}/${todoItems.length}`;
-    const list = todoItems
+    const list = progress.todoItems
       .map((item) => `${item.step}. ${item.completed ? "✓" : "○"} ${item.text}`)
       .join("\n");
-    notify(this.pi, ctx, `Plan progress ${progress}\n${list}`, "info");
+    notify(this.pi, ctx, `Plan progress ${progress.completedSteps}/${progress.totalSteps}\n${list}`, "info");
   }
 
   async handleCommand(args: unknown, ctx: ExtensionContext): Promise<GuidedWorkflowResult> {
@@ -666,8 +664,25 @@ export class PiPlanWorkflow extends GuidedWorkflow {
     return undefined;
   }
 
-  private getTodosItemsFromGuidedState(): TodoItem[] {
-    return this.buildCompactTodoItems(this.getLatestPlanText(), this.getExecutionSnapshot().items);
+  private getExecutionProgressView(): {
+    todoItems: TodoItem[];
+    totalSteps: number;
+    completedSteps: number;
+  } {
+    const executionItems = this.getExecutionSnapshot().items;
+    if (executionItems.length === 0) {
+      return {
+        todoItems: [],
+        totalSteps: 0,
+        completedSteps: 0,
+      };
+    }
+
+    return {
+      todoItems: this.buildCompactTodoItems(this.getLatestPlanText(), executionItems),
+      totalSteps: executionItems.length,
+      completedSteps: executionItems.filter((item) => item.completed).length,
+    };
   }
 
   private buildCompactTodoItems(
@@ -829,14 +844,13 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return;
     }
 
-    const executionItems = this.getExecutionSnapshot().items;
-    if (executionItems.length === 0) {
+    const progress = this.getExecutionProgressView();
+    if (progress.totalSteps === 0) {
       ctx.ui.setWidget(TODO_WIDGET_KEY, undefined);
       return;
     }
 
-    const todoItems = this.buildCompactTodoItems(this.getLatestPlanText(), executionItems);
-    const lines = todoItems.map((item) => {
+    const lines = progress.todoItems.map((item) => {
       if (item.completed) {
         return (
           ctx.ui.theme.fg("success", "☑ ") +
@@ -854,12 +868,11 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return;
     }
 
-    const executionItems = this.getExecutionSnapshot().items;
-    if (executionItems.length > 0) {
-      const completed = executionItems.filter((item) => item.completed).length;
+    const progress = this.getExecutionProgressView();
+    if (progress.totalSteps > 0) {
       ctx.ui.setStatus(
         STATUS_KEY,
-        ctx.ui.theme.fg("accent", `📋 ${completed}/${executionItems.length}`),
+        ctx.ui.theme.fg("accent", `📋 ${progress.completedSteps}/${progress.totalSteps}`),
       );
       this.updateTodoWidget(ctx);
       return;

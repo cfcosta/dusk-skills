@@ -954,8 +954,7 @@ test("after a PASS critique the plan stays tracked without leaking visible follo
   await harness.runCommand("todos");
 
   expect(harness.uiStub.notifications).toContainEqual({
-    message:
-      "Plan progress 0/2\n1. ○ A regression test for prompt leakage\n2. ○ Approval action UI to show a compact summary",
+    message: "No tracked plan steps. Create a plan in /plan mode first.",
     level: "info",
   });
 });
@@ -1039,6 +1038,61 @@ test("approve action can include an execution note and restores normal tools", a
     "☐ A regression test for prompt leakage",
     "☐ Approval action UI to show a compact summary",
   ]);
+});
+
+test("execution progress surfaces derive from guided execution snapshots", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "approve" },
+  });
+
+  await enterExecutionState(harness);
+
+  expect(harness.uiStub.statuses.get("plan")).toBe("📋 0/2");
+  expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
+    "☐ A regression test for prompt leakage",
+    "☐ Approval action UI to show a compact summary",
+  ]);
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications.at(-1)).toEqual({
+    message:
+      "Plan progress 0/2\n1. ○ A regression test for prompt leakage\n2. ○ Approval action UI to show a compact summary",
+    level: "info",
+  });
+
+  await harness.emit("turn_end", {
+    message: {
+      role: "assistant",
+      content: [{ type: "text", text: "Implemented step one [DONE:1]" }],
+    },
+  });
+
+  expect(harness.uiStub.statuses.get("plan")).toBe("📋 1/2");
+  expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
+    "☑ A regression test for prompt leakage",
+    "☐ Approval action UI to show a compact summary",
+  ]);
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications.at(-1)).toEqual({
+    message:
+      "Plan progress 1/2\n1. ✓ A regression test for prompt leakage\n2. ○ Approval action UI to show a compact summary",
+    level: "info",
+  });
+
+  await harness.emit("turn_end", {
+    message: {
+      role: "assistant",
+      content: [{ type: "text", text: "Implemented step two [DONE:2]" }],
+    },
+  });
+
+  expect(harness.uiStub.statuses.get("plan")).toBeUndefined();
+  expect(harness.uiStub.widgets.get("plan-todos")).toBeUndefined();
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications.at(-1)).toEqual({
+    message: "No tracked plan steps. Create a plan in /plan mode first.",
+    level: "info",
+  });
 });
 
 test("execution prompts rehydrate structured step details and DONE markers advance", async () => {
