@@ -16,45 +16,47 @@ import {
 } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 
-interface AskUserQuestionOption {
+export interface AskUserQuestionOption {
   label: string;
   description: string;
   preview?: string;
 }
 
-interface AskUserQuestionInput {
+export interface AskUserQuestionInput {
   question: string;
   header: string;
   options: AskUserQuestionOption[];
   multiSelect: boolean;
 }
 
-interface QuestionAnnotation {
+export interface QuestionAnnotation {
   preview?: string;
   notes?: string;
 }
 
-interface AskUserQuestionResultDetails {
+export interface AskUserQuestionResultDetails {
   questions: AskUserQuestionInput[];
   answers: Record<string, string>;
   annotations?: Record<string, QuestionAnnotation>;
   cancelled: boolean;
 }
 
-interface AskUserQuestionToolParams {
-  questions: Array<{
-    question: string;
-    header?: string;
-    options: AskUserQuestionOption[];
-    multiSelect?: boolean;
-  }>;
+export interface AskUserQuestionQuestionConfig {
+  question: string;
+  header?: string;
+  options: AskUserQuestionOption[];
+  multiSelect?: boolean;
 }
 
-interface NormalizedOption extends AskUserQuestionOption {
+export interface AskUserQuestionToolParams {
+  questions: AskUserQuestionQuestionConfig[];
+}
+
+export interface NormalizedOption extends AskUserQuestionOption {
   isOther?: boolean;
 }
 
-interface NormalizedQuestion {
+export interface NormalizedQuestion {
   id: string;
   question: string;
   header: string;
@@ -62,7 +64,7 @@ interface NormalizedQuestion {
   multiSelect: boolean;
 }
 
-interface SelectionState {
+export interface SelectionState {
   optionLabels: string[];
   optionIndexes: number[];
   customText?: string;
@@ -225,13 +227,8 @@ function errorResult(
   };
 }
 
-function normalizeQuestions(
-  rawQuestions: Array<{
-    question: string;
-    header?: string;
-    options: AskUserQuestionOption[];
-    multiSelect?: boolean;
-  }>,
+export function normalizeQuestions(
+  rawQuestions: AskUserQuestionQuestionConfig[],
 ): { ok: true; questions: NormalizedQuestion[] } | { ok: false; message: string } {
   if (rawQuestions.length === 0) {
     return { ok: false, message: "Error: No questions provided" };
@@ -310,7 +307,7 @@ function getSelectionState(
   );
 }
 
-function buildResultDetails(
+export function buildResultDetails(
   questions: NormalizedQuestion[],
   selections: Map<string, SelectionState>,
   cancelled: boolean,
@@ -356,7 +353,7 @@ function buildResultDetails(
   };
 }
 
-function buildResultContent(details: AskUserQuestionResultDetails): string {
+export function buildResultContent(details: AskUserQuestionResultDetails): string {
   const parts = Object.entries(details.answers).map(([question, answer]) => {
     const annotation = details.annotations?.[question];
     const chunks = [`"${question}"="${answer}"`];
