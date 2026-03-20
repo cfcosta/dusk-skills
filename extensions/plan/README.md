@@ -92,6 +92,8 @@ After a plan is generated, Pi first runs an internal hidden critique pass. The c
 - **Regenerate plan** _(fresh plan from scratch, no note required)_
 - **Exit plan mode**
 
+If you press `Esc` to cancel an in-flight planning response, Pi now stays in read-only plan mode and waits for your next message as steering input instead of auto-retrying the interrupted draft.
+
 Choosing **Approve and execute now** automatically:
 
 1. exits plan mode,

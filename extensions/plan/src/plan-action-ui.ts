@@ -302,7 +302,9 @@ export class PlanActionComponent {
       this.done({
         cancelled: false,
         action: selected,
-        note: EDITABLE_ACTIONS.has(selected) ? this.getNormalizedNote(selected) || undefined : undefined,
+        note: EDITABLE_ACTIONS.has(selected)
+          ? this.getNormalizedNote(selected) || undefined
+          : undefined,
       });
       return;
     }

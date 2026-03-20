@@ -47,7 +47,8 @@ mock.module("@mariozechner/pi-tui", () => ({
   },
 }));
 
-const { PlanActionComponent, selectPlanNextActionWithInlineNote } = await import("./plan-action-ui");
+const { PlanActionComponent, selectPlanNextActionWithInlineNote } =
+  await import("./plan-action-ui");
 
 type PlanNextActionResult = Awaited<ReturnType<typeof selectPlanNextActionWithInlineNote>>;
 
@@ -74,7 +75,8 @@ function createApprovalDetails(): NonNullable<PlanApprovalDetails> {
     previewSteps: [
       {
         step: 1,
-        label: "A very long regression test for prompt leakage in the guided workflow approval surface",
+        label:
+          "A very long regression test for prompt leakage in the guided workflow approval surface",
         targetsSummary: "src/index.test.ts, src/workflow.ts, src/plan-action-ui.ts",
         validationSummary: "bun test ./src/index.test.ts, bun run typecheck",
       },

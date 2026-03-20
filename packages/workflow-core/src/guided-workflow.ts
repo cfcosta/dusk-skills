@@ -349,10 +349,7 @@ export class GuidedWorkflow implements GuidedWorkflowController {
   private retryPendingPrompt(ctx: ExtensionContext): GuidedWorkflowResult {
     if (!this.pendingPromptText || !this.pendingPromptDelivery || !this.pendingResponseKind) {
       this.resetWorkflowState();
-      ctx.ui.notify(
-        "Guided workflow stopped: missing pending prompt state for recovery.",
-        "error",
-      );
+      ctx.ui.notify("Guided workflow stopped: missing pending prompt state for recovery.", "error");
       return { kind: "recoverable_error", reason: "missing_pending_prompt" };
     }
 
@@ -660,12 +657,16 @@ export class GuidedWorkflow implements GuidedWorkflowController {
     return { completedCount, currentStepCompleted };
   }
 
-  private resetWorkflowState() {
+  protected abandonPendingResponse(): void {
     this.state = this.createIdleState();
     this.missingOutputRetries = 0;
     this.pendingResponseKind = undefined;
     this.pendingPromptText = undefined;
     this.pendingPromptDelivery = undefined;
+  }
+
+  private resetWorkflowState() {
+    this.abandonPendingResponse();
     this.latestPlanText = undefined;
     this.latestCritiqueText = undefined;
     this.executionItems = [];

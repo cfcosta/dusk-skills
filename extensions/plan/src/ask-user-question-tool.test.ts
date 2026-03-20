@@ -113,7 +113,10 @@ function getRegisteredAskUserQuestionTool() {
       theme: ReturnType<typeof createTheme>,
     ) => { render(width: number): string[] };
     renderResult?: (
-      result: { content: Array<{ type: "text"; text: string }>; details?: AskUserQuestionResultDetails },
+      result: {
+        content: Array<{ type: "text"; text: string }>;
+        details?: AskUserQuestionResultDetails;
+      },
       options: unknown,
       theme: ReturnType<typeof createTheme>,
     ) => { render(width: number): string[] };
@@ -328,7 +331,19 @@ test("AskUserQuestionComponent keeps the editor focused in custom-answer mode an
 
 test("AskUserQuestion renderCall shows a concise questionnaire summary", () => {
   const tool = getRegisteredAskUserQuestionTool();
-  const component = tool.renderCall?.({ questions: [buildQuestion(), { ...buildQuestion("Backend"), question: "How broad should the work be?", header: "Breadth" }] }, createTheme());
+  const component = tool.renderCall?.(
+    {
+      questions: [
+        buildQuestion(),
+        {
+          ...buildQuestion("Backend"),
+          question: "How broad should the work be?",
+          header: "Breadth",
+        },
+      ],
+    },
+    createTheme(),
+  );
 
   expect(component).toBeTruthy();
   expect(renderComponentText(component!)).toContain("AskUserQuestion 2 questions (Scope, Breadth)");

@@ -387,7 +387,10 @@ function buildQuestionnaireCallSummary(
     .join(", ");
 
   let text = theme.fg("toolTitle", "AskUserQuestion ");
-  text += theme.fg("muted", `${safeQuestions.length} question${safeQuestions.length === 1 ? "" : "s"}`);
+  text += theme.fg(
+    "muted",
+    `${safeQuestions.length} question${safeQuestions.length === 1 ? "" : "s"}`,
+  );
   if (labels) {
     text += theme.fg("dim", ` (${truncateToWidth(labels, 40)})`);
   }
@@ -410,11 +413,14 @@ function buildQuestionnaireResultLines(
     }
 
     const annotation = details.annotations?.[question.question];
-    const hasSuggestedOptionMatch = question.options.some((option) => answer.includes(option.label));
+    const hasSuggestedOptionMatch = question.options.some((option) =>
+      answer.includes(option.label),
+    );
     const label = question.header || question.question;
-    const renderedAnswer = !hasSuggestedOptionMatch && annotation?.notes
-      ? `${theme.fg("muted", "(wrote) ")}${annotation.notes}`
-      : answer;
+    const renderedAnswer =
+      !hasSuggestedOptionMatch && annotation?.notes
+        ? `${theme.fg("muted", "(wrote) ")}${annotation.notes}`
+        : answer;
     lines.push(`${theme.fg("success", "✓ ")}${theme.fg("accent", label)}: ${renderedAnswer}`);
   }
 
@@ -422,9 +428,10 @@ function buildQuestionnaireResultLines(
     return lines;
   }
 
-  const text = details.answers && Object.keys(details.answers).length === 0
-    ? "User cancelled the questionnaire"
-    : buildResultContent(details);
+  const text =
+    details.answers && Object.keys(details.answers).length === 0
+      ? "User cancelled the questionnaire"
+      : buildResultContent(details);
   return [text];
 }
 
@@ -515,13 +522,11 @@ export class AskUserQuestionComponent {
         const active = index === this.currentTab;
         const answered = Boolean(
           getSelectionState(this.selections, question.id).optionLabels.length > 0 ||
-            getSelectionState(this.selections, question.id).customText?.trim(),
+          getSelectionState(this.selections, question.id).customText?.trim(),
         );
         const marker = answered ? "■" : "□";
         const text = ` ${marker} ${question.header} `;
-        tabs.push(
-          this.theme.fg(active ? "accent" : answered ? "success" : "muted", `${text} `),
-        );
+        tabs.push(this.theme.fg(active ? "accent" : answered ? "success" : "muted", `${text} `));
       }
       const submitActive = this.currentTab === this.questions.length;
       const canSubmit = this.allAnswered();
@@ -720,8 +725,8 @@ export class AskUserQuestionComponent {
       const selection = this.selections.get(question.id);
       return Boolean(
         selection &&
-          (selection.optionLabels.length > 0 ||
-            (selection.customText && selection.customText.trim())),
+        (selection.optionLabels.length > 0 ||
+          (selection.customText && selection.customText.trim())),
       );
     });
   }

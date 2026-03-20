@@ -395,6 +395,18 @@ export class PiPlanWorkflow extends GuidedWorkflow {
         return correlationFailure;
       }
 
+      if (ctx.hasUI && !lastAssistantText) {
+        this.abandonPendingResponse();
+        this.setStatus(ctx);
+        notify(
+          this.pi,
+          ctx,
+          "Planning response interrupted. Send another message to steer the plan and Pi will use it for the next draft.",
+          "info",
+        );
+        return { kind: "ok" };
+      }
+
       if (pendingResponseKind === "planning") {
         if (!lastAssistantText) {
           return super.handleAgentEnd(event, ctx);

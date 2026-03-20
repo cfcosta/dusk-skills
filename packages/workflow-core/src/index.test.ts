@@ -377,7 +377,10 @@ test("registerPhaseWorkflowExtension resolves prompts and wires workflow handler
   );
   assert.equal(listeners.agent_end?.({ messages: ["report"] }, ctx as never), "agent-end-result");
   assert.equal(listeners.session_start?.({ restored: true }, ctx as never), "session-start-result");
-  assert.equal(listeners.session_switch?.(sessionSwitchEvent, ctx as never), "session-switch-result");
+  assert.equal(
+    listeners.session_switch?.(sessionSwitchEvent, ctx as never),
+    "session-switch-result",
+  );
   assert.equal(listeners.session_fork?.(sessionForkEvent, ctx as never), "session-fork-result");
   assert.equal(
     listeners.session_compact?.(sessionCompactEvent, ctx as never),

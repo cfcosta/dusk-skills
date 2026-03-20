@@ -617,6 +617,51 @@ test("one-shot /plan task enables plan mode and starts a correlated planning req
   expect(extractRequestId(harness.sentUserMessages[0] ?? "")).toBeTruthy();
 });
 
+test("cancelling a planning response keeps plan mode ready for steering instead of auto-retrying", async () => {
+  const harness = createPlanExtensionHarness({ hasUI: true });
+
+  await harness.runCommand("plan", "Investigate flaky prompt extraction");
+
+  const firstPrompt = harness.sentUserMessages[0] ?? "";
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: firstPrompt }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "tool_result", text: "ignored" }],
+      },
+    ],
+  });
+
+  expect(harness.sentUserMessages).toHaveLength(1);
+  expect(harness.uiStub.notifications).toContainEqual({
+    message:
+      "Planning response interrupted. Send another message to steer the plan and Pi will use it for the next draft.",
+    level: "info",
+  });
+
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Also keep the keyboard flow fast." }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildPlanText() }],
+      },
+    ],
+  });
+
+  expect(harness.sentMessages).toHaveLength(1);
+  expect(String(harness.sentMessages[0]?.content ?? "")).toContain(
+    "Critique the latest proposed implementation plan for execution quality.",
+  );
+});
+
 test("unparseable planning drafts trigger one automatic retry with a new request id", async () => {
   const harness = createPlanExtensionHarness({ hasUI: true });
 
@@ -644,7 +689,9 @@ test("unparseable planning drafts trigger one automatic retry with a new request
   const retryRequestId = extractRequestId(retryPrompt);
   expect(retryRequestId).toBeTruthy();
   expect(retryRequestId).not.toBe(firstRequestId);
-  expect(retryPrompt).toContain("Include an explicit Plan: section with numbered executable steps.");
+  expect(retryPrompt).toContain(
+    "Include an explicit Plan: section with numbered executable steps.",
+  );
   expect(harness.uiStub.notifications).toContainEqual({
     message:
       "Couldn't extract plan steps. Asking Pi to restate the same draft with an explicit Plan: section.",
