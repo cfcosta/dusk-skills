@@ -33,6 +33,7 @@ import {
 
 const STATUS_KEY = "plan";
 const TODO_WIDGET_KEY = "plan-todos";
+const MAX_VISIBLE_TODO_WIDGET_LINES = 5;
 
 const PLAN_TOOL_CANDIDATES = [
   "read",
@@ -259,13 +260,19 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return;
     }
 
-    const list = progress.todoItems
-      .map((item) => `${item.step}. ${item.completed ? "✓" : "○"} ${item.text}`)
-      .join("\n");
+    const visibleItems = selectVisibleTodoItems(progress.todoItems);
+    const lines = visibleItems.items.map((item) => {
+      return `${item.step}. ${item.completed ? "✓" : "○"} ${item.text}`;
+    });
+    if (visibleItems.hiddenBefore > 0) {
+      lines.unshift(
+        `… ${visibleItems.hiddenBefore} earlier item${visibleItems.hiddenBefore === 1 ? "" : "s"} hidden`,
+      );
+    }
     notify(
       this.pi,
       ctx,
-      `Plan progress ${progress.completedSteps}/${progress.totalSteps}\n${list}`,
+      `Plan progress ${progress.completedSteps}/${progress.totalSteps}\n${lines.join("\n")}`,
       "info",
     );
   }
@@ -987,7 +994,8 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       return;
     }
 
-    const lines = progress.todoItems.map((item) => {
+    const widgetItems = selectVisibleTodoItems(progress.todoItems);
+    const lines = widgetItems.items.map((item) => {
       if (item.completed) {
         return (
           ctx.ui.theme.fg("success", "☑ ") +
@@ -996,6 +1004,15 @@ export class PiPlanWorkflow extends GuidedWorkflow {
       }
       return `${ctx.ui.theme.fg("muted", "☐ ")}${item.text}`;
     });
+
+    if (widgetItems.hiddenBefore > 0) {
+      lines.unshift(
+        ctx.ui.theme.fg(
+          "dim",
+          `… ${widgetItems.hiddenBefore} earlier item${widgetItems.hiddenBefore === 1 ? "" : "s"} hidden`,
+        ),
+      );
+    }
 
     ctx.ui.setWidget(TODO_WIDGET_KEY, lines);
   }
@@ -1255,6 +1272,41 @@ function describeExecutionStep(
     targets: structuredStep ? summarizeExecutionValues(structuredStep.targets) : undefined,
     validation: structuredStep ? summarizeExecutionValues(structuredStep.validation) : undefined,
     risks: structuredStep ? summarizeExecutionValues(structuredStep.risks) : undefined,
+  };
+}
+
+function selectVisibleTodoItems(
+  todoItems: TodoItem[],
+  maxVisibleLines: number = MAX_VISIBLE_TODO_WIDGET_LINES,
+): {
+  hiddenBefore: number;
+  items: TodoItem[];
+} {
+  if (todoItems.length <= maxVisibleLines) {
+    return { hiddenBefore: 0, items: [...todoItems] };
+  }
+
+  const currentIndex = todoItems.findIndex((item) => !item.completed);
+  if (currentIndex < 0) {
+    const start = Math.max(0, todoItems.length - maxVisibleLines);
+    return {
+      hiddenBefore: start,
+      items: todoItems.slice(start),
+    };
+  }
+
+  if (currentIndex < maxVisibleLines) {
+    return {
+      hiddenBefore: 0,
+      items: todoItems.slice(0, maxVisibleLines),
+    };
+  }
+
+  const visibleTaskLines = Math.max(1, maxVisibleLines - 1);
+  const start = Math.max(0, currentIndex - 1);
+  return {
+    hiddenBefore: start,
+    items: todoItems.slice(start, start + visibleTaskLines),
   };
 }
 

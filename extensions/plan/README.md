@@ -173,7 +173,7 @@ When a plan includes nested step metadata like target files/components, validati
 - `/plan continue <note>` — when approval is pending and no interactive UI is available, continue planning with a required note
 - `/plan regenerate` — when approval is pending and no interactive UI is available, rebuild the plan from scratch
 - `/plan exit` — when approval is pending and no interactive UI is available, leave plan mode and clear tracked plan state
-- `/todos` — show tracked approved-execution progress (`✓` and `○`) from guided execution items, using compact labels even if the underlying plan stores richer metadata
+- `/todos` — show tracked approved-execution progress (`✓` and `○`) from guided execution items, using compact labels even if the underlying plan stores richer metadata and trimming older items when needed to keep the current step visible
 - approved execution runs one step per turn, requires one atomic `jj` commit for that step, then auto-continues to the next remaining todo
 - after each planning turn, the action menu includes:
   - a compact review summary for the extracted plan

@@ -213,6 +213,20 @@ function buildRichPlanText(): string {
   ].join("\n");
 }
 
+function buildLongPlanText(stepCount = 8): string {
+  return [
+    "1) Task understanding",
+    "2) Codebase findings",
+    "3) Approach options / trade-offs",
+    "4) Open questions / assumptions",
+    "5) Plan:",
+    ...Array.from({ length: stepCount }, (_value, index) => {
+      return `${index + 1}. Task ${index + 1} for the scrolling todo widget`;
+    }),
+    "6) Ready to execute when approved.",
+  ].join("\n");
+}
+
 function buildUnparseablePlanText(): string {
   return [
     "1) Task understanding",
@@ -1526,6 +1540,62 @@ test("todos output and widget stay compact for metadata-rich plans", async () =>
   });
   expect(harness.uiStub.notifications.at(-1)?.message).not.toContain("src/index.test.ts");
   expect(harness.uiStub.notifications.at(-1)?.message).not.toContain("Validation method");
+});
+
+test("todo widget hides older items once the current step would scroll off-screen", async () => {
+  const harness = createPlanExtensionHarness({
+    hasUI: true,
+    customSelection: { cancelled: false, action: "approve" },
+  });
+
+  await harness.runCommand("plan", "on");
+  await harness.emit("agent_end", {
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: buildLongPlanText() }],
+      },
+    ],
+  });
+  await emitMatchedHiddenResponse(
+    harness,
+    "1) Verdict: PASS\n2) Issues:\n- none\n3) Required fixes:\n- none\n4) Summary:\n- ready",
+  );
+
+  expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
+    "☐ Task 1 for the scrolling todo widget",
+    "☐ Task 2 for the scrolling todo widget",
+    "☐ Task 3 for the scrolling todo widget",
+    "☐ Task 4 for the scrolling todo widget",
+    "☐ Task 5 for the scrolling todo widget",
+  ]);
+
+  await harness.emit("turn_end", {
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: "Completed the first chunk [DONE:1] [DONE:2] [DONE:3] [DONE:4] [DONE:5]",
+        },
+      ],
+    },
+  });
+
+  expect(harness.uiStub.widgets.get("plan-todos")).toEqual([
+    "… 4 earlier items hidden",
+    "☑ Task 5 for the scrolling todo widget",
+    "☐ Task 6 for the scrolling todo widget",
+    "☐ Task 7 for the scrolling todo widget",
+    "☐ Task 8 for the scrolling todo widget",
+  ]);
+
+  await harness.runCommand("todos");
+  expect(harness.uiStub.notifications.at(-1)).toEqual({
+    message:
+      "Plan progress 5/8\n… 4 earlier items hidden\n5. ✓ Task 5 for the scrolling todo widget\n6. ○ Task 6 for the scrolling todo widget\n7. ○ Task 7 for the scrolling todo widget\n8. ○ Task 8 for the scrolling todo widget",
+    level: "info",
+  });
 });
 
 test("final guided execution completion stops prompting and clears /todos state", async () => {
