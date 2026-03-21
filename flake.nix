@@ -80,9 +80,11 @@
             meta.mainProgram = "kagi-search";
           };
 
+          trafilatura = pkgs.python313Packages.trafilatura;
+
         in
         rec {
-          inherit chrome-cdp kagi-search;
+          inherit chrome-cdp kagi-search trafilatura;
 
           resources = pkgs.stdenv.mkDerivation (_: {
             name = "duskpi-resources";
@@ -108,13 +110,17 @@
               cp -rf ${inputs.skill-visual-explainer}/* $out/skills/visual-explainer/
 
               mkdir -p $out/skills/design-taste-frontend
-              cp -rf ${inputs.skill-design-taste-frontend}/SKILL.md $out/skills/design-taste-frontend/
+              cp -rf ${inputs.skill-design-taste-frontend}/skills/taste-skill/SKILL.md $out/skills/design-taste-frontend/
 
               cp -rf ${./skills}/chrome-cdp $out/skills/chrome-cdp
+              cp -rf ${./skills}/fetch $out/skills/fetch
               cp -rf ${./skills}/kagi-search $out/skills/kagi-search
 
               substituteInPlace $out/skills/chrome-cdp/SKILL.md \
                 --replace-fail '##CHROME-CDP##' '${chrome-cdp}/bin/chrome-cdp'
+
+              substituteInPlace $out/skills/fetch/SKILL.md \
+                --replace-fail '##TRAFILATURA##' '${trafilatura}/bin/trafilatura'
 
               substituteInPlace $out/skills/kagi-search/SKILL.md \
                 --replace-fail '##KAGI-SEARCH##' '${kagi-search}/bin/kagi-search'
@@ -151,6 +157,7 @@
             paths = [
               inputs.llm-agents.packages.${system}.pi
               kagi-search
+              trafilatura
               resources
             ];
             nativeBuildInputs = [ pkgs.makeWrapper ];

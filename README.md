@@ -21,11 +21,13 @@ The default package bundles upstream Pi together with repo-owned resources:
 - **Side-question extension**
   - `/btw`
 - **Prompt templates**
+  - `/fetch`
   - `/innovate`
   - `/jj-commit`
 - **Skills**
   - `chrome-cdp`
   - `design-taste-frontend`
+  - `fetch`
   - `humanizer`
   - `rust-proptest`
   - `visual-explainer`
@@ -169,6 +171,7 @@ The side answer is tool-less by design and is intended to feel lightweight and d
 
 The distribution ships prompt templates that expand into reusable workflows.
 
+- `/fetch` for pulling readable content from one or more URLs through the bundled fetch skill
 - `/innovate` for ideation and solution exploration
 - `/jj-commit` for commit-message and jujutsu-oriented commit flow guidance
 
@@ -180,6 +183,7 @@ The bundled skills cover common high-value tasks:
 
 - **chrome-cdp** for inspecting and interacting with your live Chrome, Chromium, or Brave session
 - **design-taste-frontend** for stronger UI/UX and frontend design decisions
+- **fetch** for extracting readable content from web pages with Trafilatura
 - **humanizer** for making generated text sound less AI-written
 - **rust-proptest** for Rust property testing
 - **visual-explainer** for turning complex technical material into visual HTML explainers
@@ -199,6 +203,7 @@ That is why commands like these should be present right away:
 - `/plan`
 - `/todos`
 - `/btw`
+- `/fetch`
 - `/innovate`
 
 The Catppuccin theme is activated by the bundled `catppuccin` extension, which reads the package's `pi.theme` value and calls `setTheme()` after the wrapped binary has already exposed the bundled theme files.
