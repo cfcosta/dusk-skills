@@ -1,3 +1,9 @@
+import {
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_LINES,
+  formatSize,
+  truncateHead,
+} from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { lookup } from "node:dns/promises";
@@ -213,6 +219,42 @@ function errorResult(url: string, message: string): ExtensionToolResult<FetchDet
   };
 }
 
+function truncateLikeReadTool(
+  text: string,
+  continuationHint?: string,
+): { text: string; truncated: boolean } {
+  const allLines = text.split("\n");
+  const totalLines = allLines.length;
+  const truncation = truncateHead(text, {
+    maxLines: DEFAULT_MAX_LINES,
+    maxBytes: DEFAULT_MAX_BYTES,
+  });
+
+  if (truncation.firstLineExceedsLimit) {
+    const firstLineSize = formatSize(Buffer.byteLength(allLines[0] ?? "", "utf-8"));
+    const hint = continuationHint ? ` ${continuationHint}` : "";
+    return {
+      text: `[Line 1 is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit.]${hint}`,
+      truncated: true,
+    };
+  }
+
+  if (!truncation.truncated) {
+    return { text: truncation.content, truncated: false };
+  }
+
+  const endLineDisplay = truncation.outputLines;
+  const hint = continuationHint ? ` ${continuationHint}` : "";
+  let outputText = truncation.content;
+  if (truncation.truncatedBy === "lines") {
+    outputText += `\n\n[Showing lines 1-${endLineDisplay} of ${totalLines}.${hint}]`;
+  } else {
+    outputText += `\n\n[Showing lines 1-${endLineDisplay} of ${totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit).${hint}]`;
+  }
+
+  return { text: outputText, truncated: true };
+}
+
 function buildFetchResultText(details: FetchDetails): string {
   const lines: string[] = [];
   lines.push(`Fetched content from: ${details.final_url || details.url}`);
@@ -240,7 +282,10 @@ function buildFetchResultText(details: FetchDetails): string {
   lines.push("Content:");
   lines.push(...formatMultilineBlock(details.content, "  "));
 
-  return lines.join("\n").trim();
+  return truncateLikeReadTool(
+    lines.join("\n").trim(),
+    "Use fetch_content with a lower max_chars value or fetch the URL again if you need a different excerpt.",
+  ).text;
 }
 
 function createContextInjectionText(details: FetchDetails): string {
@@ -267,7 +312,10 @@ function createContextInjectionText(details: FetchDetails): string {
   lines.push("Fetched content:");
   lines.push(details.content);
 
-  return lines.join("\n").trim();
+  return truncateLikeReadTool(
+    lines.join("\n").trim(),
+    "Use fetch_content with max_chars to control how much page text is injected.",
+  ).text;
 }
 
 function createTimeoutSignal(parentSignal: AbortSignal, timeoutMs: number) {
@@ -601,9 +649,26 @@ export default function fetchExtension(pi: ExtensionAPI): void {
       return new Text(text, 0, 0);
     },
 
-    renderResult(result, _options, _theme) {
+    renderResult(result, options, theme) {
       const text = result.content[0];
-      return new Text(text?.type === "text" ? text.text : "", 0, 0);
+      const output = text?.type === "text" ? text.text : "";
+
+      if (options.isPartial) {
+        return new Text(theme.fg("warning", "Fetching..."), 0, 0);
+      }
+
+      if (options.expanded) {
+        return new Text(output, 0, 0);
+      }
+
+      const lines = output.split("\n");
+      const firstLine = lines[0] ?? "";
+      const preview = firstLine.length > 140 ? `${firstLine.slice(0, 137)}...` : firstLine;
+      let summary = preview;
+      if (lines.length > 1) {
+        summary += theme.fg("muted", ` … ${lines.length - 1} more lines`);
+      }
+      return new Text(summary, 0, 0);
     },
   });
 }
