@@ -367,6 +367,35 @@ test("real finder prompt requires repo triage and code-evidenced findings", () =
   assert.match(loaded.prompts.finder, /Software Supply Chain Failures/i);
 });
 
+test("real skeptic prompt rejects weak security findings", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(loaded.prompts.skeptic, /hypothetical-only attack path/i);
+  assert.match(loaded.prompts.skeptic, /claims that do not involve attacker-controlled input/i);
+  assert.match(
+    loaded.prompts.skeptic,
+    /authorization or authentication findings that do not identify a reachable protected resource or a plausible bypass path/i,
+  );
+  assert.match(
+    loaded.prompts.skeptic,
+    /logging, design, or configuration claims inferred only from missing code or missing context/i,
+  );
+  assert.match(
+    loaded.prompts.skeptic,
+    /dependency or supply-chain claims without concrete version, usage, or update-path evidence/i,
+  );
+  assert.match(
+    loaded.prompts.skeptic,
+    /downgrade severity and confidence when exploitability is weak, partial, or assumption-heavy/i,
+  );
+});
+
 test("owaspFix command wiring uses real prompt files end-to-end", async () => {
   const commands: Record<string, { handler: (args: unknown, ctx: unknown) => Promise<unknown> }> =
     {};
