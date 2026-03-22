@@ -288,7 +288,7 @@ function buildFullFetchResultText(details: FetchDetails): string {
 function buildFetchResultText(details: FetchDetails): string {
   return truncateLikeReadTool(
     buildFullFetchResultText(details),
-    "Use fetch_content with a lower max_chars value or fetch the URL again if you need a different excerpt.",
+    "Use web_fetch with a lower max_chars value or fetch the URL again if you need a different excerpt.",
   ).text;
 }
 
@@ -318,7 +318,7 @@ function createContextInjectionText(details: FetchDetails): string {
 
   return truncateLikeReadTool(
     lines.join("\n").trim(),
-    "Use fetch_content with max_chars to control how much page text is injected.",
+    "Use web_fetch with max_chars to control how much page text is injected.",
   ).text;
 }
 
@@ -624,14 +624,14 @@ export default function fetchExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool<FetchParams, FetchDetails>({
-    name: "fetch_content",
-    label: "fetch_content",
+    name: "web_fetch",
+    label: "web_fetch",
     description: "Fetch a specific URL and extract readable main content via Readability.",
     promptSnippet:
       "Fetch readable content from a specific URL when you already know the page to inspect.",
     promptGuidelines: [
       "Use this tool when you already have a concrete URL and need readable page content without browser automation.",
-      "Prefer web_search first when you need discovery; use fetch_content once you know the exact page to inspect.",
+      "Prefer web_search first when you need discovery; use web_fetch once you know the exact page to inspect.",
       "Keep fetched content short enough to fit the task and lower max_chars when only a quick excerpt is needed.",
     ],
     parameters: FetchParamsSchema,
@@ -649,7 +649,7 @@ export default function fetchExtension(pi: ExtensionAPI): void {
     renderCall(args, theme) {
       const url = trimText(args.url);
       const maxChars = clampInteger(args.max_chars, 12000, 500, 50000);
-      const text = `${theme.fg("toolTitle", "fetch_content ")}${theme.fg("accent", url)}${theme.fg("dim", ` (${maxChars} chars)`)}`;
+      const text = `${theme.fg("toolTitle", "web_fetch ")}${theme.fg("accent", url)}${theme.fg("dim", ` (${maxChars} chars)`)}`;
       return new Text(text, 0, 0);
     },
 

@@ -1,6 +1,6 @@
 # web-fetch extension
 
-Registers a `fetch_content` tool plus a `/web-fetch` command.
+Registers a `web_fetch` tool plus a `/web-fetch` command.
 
 ## Behavior
 
@@ -12,5 +12,5 @@ Registers a `fetch_content` tool plus a `/web-fetch` command.
 ## Notes
 
 - `/web-fetch <url>` fetches immediately instead of routing through a prompt template
-- `fetch_content` is available as a first-class tool for autonomous workflows
+- `web_fetch` is available as a first-class tool for autonomous workflows
 - local and private hosts are blocked for safety

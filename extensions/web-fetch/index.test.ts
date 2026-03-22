@@ -225,13 +225,13 @@ afterEach(() => {
   lookupMock.mockClear();
 });
 
-test("registers fetch_content and /web-fetch", () => {
+test("registers web_fetch and /web-fetch", () => {
   const harness = createHarness();
-  expect(harness.tools.has("fetch_content")).toBe(true);
+  expect(harness.tools.has("web_fetch")).toBe(true);
   expect(harness.commands.has("web-fetch")).toBe(true);
 });
 
-test("fetch_content fetches a page and extracts readable content", async () => {
+test("web_fetch fetches a page and extracts readable content", async () => {
   globalThis.fetch = mock(async (input: RequestInfo | URL) => {
     const url = String(input);
     expect(url).toBe("https://example.com/article");
@@ -243,7 +243,7 @@ test("fetch_content fetches a page and extracts readable content", async () => {
   }) as typeof fetch;
 
   const harness = createHarness();
-  const tool = harness.getTool("fetch_content");
+  const tool = harness.getTool("web_fetch");
   const result = (await tool.execute(
     "tool-call-1",
     { url: "https://example.com/article", max_chars: 5000 },
@@ -308,9 +308,9 @@ test("/web-fetch prompts for a URL when none is provided", async () => {
   );
 });
 
-test("fetch_content returns an error for blocked local URLs", async () => {
+test("web_fetch returns an error for blocked local URLs", async () => {
   const harness = createHarness();
-  const tool = harness.getTool("fetch_content");
+  const tool = harness.getTool("web_fetch");
   const result = (await tool.execute(
     "tool-call-2",
     { url: "http://localhost/private" },
@@ -322,7 +322,7 @@ test("fetch_content returns an error for blocked local URLs", async () => {
   expect(result.content[0]?.text).toContain("blocked host");
 });
 
-test("fetch_content truncates long multiline output like read", async () => {
+test("web_fetch truncates long multiline output like read", async () => {
   const lines = Array.from({ length: 2500 }, (_, i) => `<p>Line ${i + 1}</p>`).join("");
   globalThis.fetch = mock(
     async () =>
@@ -333,7 +333,7 @@ test("fetch_content truncates long multiline output like read", async () => {
   ) as typeof fetch;
 
   const harness = createHarness();
-  const tool = harness.getTool("fetch_content");
+  const tool = harness.getTool("web_fetch");
   const result = (await tool.execute(
     "tool-call-3",
     { url: "https://example.com/many-lines", max_chars: 50000 },
@@ -343,12 +343,12 @@ test("fetch_content truncates long multiline output like read", async () => {
   )) as { content: Array<{ type: string; text: string }> };
 
   expect(result.content[0]?.text).toContain("[Showing lines 1-");
-  expect(result.content[0]?.text).toContain("Use fetch_content with a lower max_chars value");
+  expect(result.content[0]?.text).toContain("Use web_fetch with a lower max_chars value");
 });
 
-test("fetch_content renderResult collapses multiline output", async () => {
+test("web_fetch renderResult collapses multiline output", async () => {
   const harness = createHarness();
-  const tool = harness.getTool("fetch_content");
+  const tool = harness.getTool("web_fetch");
   const rendered = tool.renderResult?.(
     {
       content: [{ type: "text", text: "First line\nSecond line\nThird line" }],
@@ -365,9 +365,9 @@ test("fetch_content renderResult collapses multiline output", async () => {
   expect(rendered.text).not.toContain("Second line");
 });
 
-test("fetch_content renderResult expands to the full fetched text", async () => {
+test("web_fetch renderResult expands to the full fetched text", async () => {
   const harness = createHarness();
-  const tool = harness.getTool("fetch_content");
+  const tool = harness.getTool("web_fetch");
   const rendered = tool.renderResult?.(
     {
       content: [

@@ -32,7 +32,7 @@ The default package bundles upstream Pi together with repo-owned resources:
   - `/innovate`
   - `/jj-commit`
 - **Custom tools**
-  - `fetch_content`
+  - `web_fetch`
   - `web_search` _(when `KAGI_API_KEY` is set)_
 - **Skills**
   - `autoresearch-create`

@@ -1057,9 +1057,9 @@ test("plan extension harness registers commands and handles agent_end in read-on
   expect(String(harness.sentMessages[0]?.content)).toContain("Plan mode enabled");
 });
 
-test("plan mode enables web_search and fetch_content when they are available", async () => {
+test("plan mode enables web_search and web_fetch when they are available", async () => {
   const harness = createPlanExtensionHarness({
-    extraTools: ["web_search", "fetch_content"],
+    extraTools: ["web_search", "web_fetch"],
   });
 
   await harness.runCommand("plan", "on");
@@ -1072,7 +1072,7 @@ test("plan mode enables web_search and fetch_content when they are available", a
     "ls",
     "ask_user_question",
     "web_search",
-    "fetch_content",
+    "web_fetch",
   ]);
 });
 

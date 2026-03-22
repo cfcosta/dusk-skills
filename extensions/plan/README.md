@@ -125,7 +125,7 @@ In plan mode:
 
 - mutating tools are blocked: `edit`, `write`, `ast_rewrite`
 - active tools are switched to a read-only subset when available
-- when available, external research can use `web_search` for discovery and `fetch_content` for reading exact pages
+- when available, external research can use `web_search` for discovery and `web_fetch` for reading exact pages
 
 ### Bash restrictions
 

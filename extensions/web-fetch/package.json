@@ -2,7 +2,7 @@
   "name": "@duskpi/web-fetch",
   "version": "0.1.0",
   "private": true,
-  "description": "Readability-backed fetch_content tool and /web-fetch command for duskpi",
+  "description": "Readability-backed web_fetch tool and /web-fetch command for duskpi",
   "type": "module",
   "scripts": {
     "test": "bun test"
