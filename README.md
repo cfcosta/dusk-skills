@@ -22,13 +22,13 @@ The default package bundles upstream Pi together with repo-owned resources:
   - `/btw`
 - **Direct commands**
   - `/fetch`
-  - `/web-search`
+  - `/web-search` _(when `KAGI_API_KEY` is set)_
 - **Prompt templates**
   - `/innovate`
   - `/jj-commit`
 - **Custom tools**
   - `fetch_content`
-  - `web_search`
+  - `web_search` _(when `KAGI_API_KEY` is set)_
 - **Skills**
   - `chrome-cdp`
   - `design-taste-frontend`
@@ -188,7 +188,9 @@ Use it when you already know the exact page you want Pi to work from.
 
 ### 4b. Use `/web-search` for direct web queries
 
-The distribution also ships a `/web-search` command that runs the bundled `web_search` implementation directly and prints the results into the session without asking the agent to interpret the command first.
+When `KAGI_API_KEY` is set, the distribution ships a `/web-search` command and `web_search` tool that run the bundled Kagi-backed implementation directly.
+
+If `KAGI_API_KEY` is not set, the search extension stays disabled, so `/web-search` and `web_search` will not be exposed in the runtime at all.
 
 Use it when you want a command-style entrypoint with immediate search output instead of asking in freeform prose.
 

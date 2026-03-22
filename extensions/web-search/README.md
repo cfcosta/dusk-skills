@@ -12,4 +12,6 @@ Registers a `web_search` tool backed directly by the Kagi Search API, plus a `/w
 
 Set `KAGI_API_KEY` in the environment.
 
+If `KAGI_API_KEY` is missing, the extension does not register `web_search` or `/web-search` at all.
+
 The tool performs the Kagi request itself instead of shelling out to a separate search CLI.

@@ -639,6 +639,10 @@ function sendCommandMessage(pi: ExtensionAPI, content: string, details?: WebSear
 }
 
 export default function webSearchExtension(pi: ExtensionAPI): void {
+  if (!getKagiAPIKey()) {
+    return;
+  }
+
   pi.registerMessageRenderer(
     "web-search-result",
     (

@@ -137,7 +137,18 @@ afterEach(() => {
   }
 });
 
-test("registers the web_search tool, /web-search command, and colored renderer", () => {
+test("does not register web_search when KAGI_API_KEY is missing", () => {
+  delete process.env.KAGI_API_KEY;
+
+  const harness = createHarness();
+  expect(harness.tools.has("web_search")).toBe(false);
+  expect(harness.commands.has("web-search")).toBe(false);
+  expect(harness.renderers.has("web-search-result")).toBe(false);
+});
+
+test("registers the web_search tool, /web-search command, and colored renderer when KAGI_API_KEY is set", () => {
+  process.env.KAGI_API_KEY = "test-key";
+
   const harness = createHarness();
   expect(harness.tools.has("web_search")).toBe(true);
   expect(harness.commands.has("web-search")).toBe(true);
@@ -145,6 +156,8 @@ test("registers the web_search tool, /web-search command, and colored renderer",
 });
 
 test("web-search renderer adds color styling", () => {
+  process.env.KAGI_API_KEY = "test-key";
+
   const harness = createHarness();
   const renderer = harness.getRenderer("web-search-result");
   const theme = {
@@ -360,11 +373,14 @@ test("web_search can fetch readable content from returned pages", async () => {
   expect(result.content[0]?.text).toContain("Content:");
 });
 
-test("web_search returns a tool error when the API key is missing", async () => {
-  delete process.env.KAGI_API_KEY;
+test("web_search returns a tool error if the API key disappears after registration", async () => {
+  process.env.KAGI_API_KEY = "test-key";
 
   const harness = createHarness();
   const tool = harness.getTool("web_search");
+
+  delete process.env.KAGI_API_KEY;
+
   const result = (await tool.execute(
     "tool-call-3",
     { query: "pi coding agent" },
