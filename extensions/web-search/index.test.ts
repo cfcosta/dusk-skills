@@ -1,10 +1,16 @@
 import { afterEach, expect, mock, test } from "bun:test";
 import type { ExtensionContext } from "../../packages/workflow-core/src/index";
 
+class MockText {
+  text: string;
+
+  constructor(text: string) {
+    this.text = text;
+  }
+}
+
 mock.module("@mariozechner/pi-tui", () => ({
-  Text: class {
-    constructor(..._args: unknown[]) {}
-  },
+  Text: MockText,
 }));
 
 mock.module("@sinclair/typebox", () => ({
@@ -32,6 +38,11 @@ interface RegisteredTool {
 interface RegisteredCommand {
   description: string;
   handler: (args: unknown, ctx: ExtensionContext) => Promise<void> | void;
+}
+
+interface RegisteredMessageRenderer {
+  customType: string;
+  render: (message: any, options: { expanded: boolean }, theme: any) => unknown;
 }
 
 function createContext(options: { hasUI?: boolean; editorValue?: string } = {}) {
@@ -69,6 +80,7 @@ function createContext(options: { hasUI?: boolean; editorValue?: string } = {}) 
 function createHarness() {
   const tools = new Map<string, RegisteredTool>();
   const commands = new Map<string, RegisteredCommand>();
+  const renderers = new Map<string, RegisteredMessageRenderer["render"]>();
   const sentMessages: Array<{ customType?: string; content?: unknown; display?: boolean }> = [];
   const pi = {
     registerTool(definition: RegisteredTool) {
@@ -76,6 +88,9 @@ function createHarness() {
     },
     registerCommand(name: string, definition: RegisteredCommand) {
       commands.set(name, definition);
+    },
+    registerMessageRenderer(customType: string, render: RegisteredMessageRenderer["render"]) {
+      renderers.set(customType, render);
     },
     sendMessage(message: { customType?: string; content?: unknown; display?: boolean }) {
       sentMessages.push(message);
@@ -87,6 +102,7 @@ function createHarness() {
   return {
     tools,
     commands,
+    renderers,
     sentMessages,
     getTool(name: string) {
       const tool = tools.get(name);
@@ -97,6 +113,11 @@ function createHarness() {
       const command = commands.get(name);
       expect(command).toBeDefined();
       return command!;
+    },
+    getRenderer(customType: string) {
+      const renderer = renderers.get(customType);
+      expect(renderer).toBeDefined();
+      return renderer!;
     },
   };
 }
@@ -116,10 +137,45 @@ afterEach(() => {
   }
 });
 
-test("registers the web_search tool and /web-search command", () => {
+test("registers the web_search tool, /web-search command, and colored renderer", () => {
   const harness = createHarness();
   expect(harness.tools.has("web_search")).toBe(true);
   expect(harness.commands.has("web-search")).toBe(true);
+  expect(harness.renderers.has("web-search-result")).toBe(true);
+});
+
+test("web-search renderer adds color styling", () => {
+  const harness = createHarness();
+  const renderer = harness.getRenderer("web-search-result");
+  const theme = {
+    fg: (color: string, text: string) => `<${color}>${text}</${color}>`,
+    strikethrough: (text: string) => text,
+  };
+
+  const rendered = renderer(
+    {
+      customType: "web-search-result",
+      content: "Web search for: pi coding agent github",
+      details: {
+        query: "pi coding agent github",
+        meta: { ms: 12, api_balance: 1.25 },
+        results: [
+          {
+            title: "pi",
+            link: "https://github.com/mariozechner/pi",
+            snippet: "AI coding agent for the terminal.",
+          },
+        ],
+        related_searches: ["pi coding agent docs"],
+      },
+    },
+    { expanded: false },
+    theme,
+  ) as MockText;
+
+  expect(rendered.text).toContain("<accent>Web search</accent>");
+  expect(rendered.text).toContain("<success>pi</success>");
+  expect(rendered.text).toContain("<accent>https://github.com/mariozechner/pi</accent>");
 });
 
 test("/web-search runs the search directly and emits results", async () => {

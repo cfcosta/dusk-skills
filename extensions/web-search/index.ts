@@ -5,6 +5,9 @@ import { isIP } from "node:net";
 import type {
   ExtensionAPI,
   ExtensionContext,
+  ExtensionCustomMessage,
+  ExtensionMessageRenderOptions,
+  ExtensionTheme,
   ExtensionToolResult,
 } from "../../packages/workflow-core/src/index";
 
@@ -265,6 +268,83 @@ function buildResultText(details: WebSearchDetails): string {
     lines.push("Related searches:");
     for (const term of details.related_searches ?? []) {
       lines.push(`- ${term}`);
+    }
+  }
+
+  return lines.join("\n").trim();
+}
+
+function buildRenderedMessageText(
+  content: string,
+  details: WebSearchDetails | undefined,
+  options: ExtensionMessageRenderOptions,
+  theme: ExtensionTheme,
+): string {
+  if (!details || !trimText(details.query)) {
+    if (content.startsWith("Error:")) {
+      return theme.fg("error", content);
+    }
+    if (content.startsWith("Usage:")) {
+      return theme.fg("warning", content);
+    }
+    return content;
+  }
+
+  const lines: string[] = [];
+  lines.push(
+    `${theme.fg("accent", "Web search")}${theme.fg("muted", ` for ${JSON.stringify(details.query)}`)}`,
+  );
+
+  const metaBits: string[] = [];
+  if (typeof details.meta?.ms === "number" && details.meta.ms > 0) {
+    metaBits.push(theme.fg("dim", `latency ${details.meta.ms} ms`));
+  }
+  if (typeof details.meta?.api_balance === "number") {
+    metaBits.push(theme.fg("dim", `balance $${details.meta.api_balance.toFixed(4)}`));
+  }
+  if (options.expanded && trimText(details.meta?.node)) {
+    metaBits.push(theme.fg("dim", `node ${details.meta?.node}`));
+  }
+  if (options.expanded && trimText(details.meta?.id)) {
+    metaBits.push(theme.fg("dim", `id ${details.meta?.id}`));
+  }
+  if (metaBits.length > 0) {
+    lines.push(metaBits.join(theme.fg("dim", " • ")));
+  }
+
+  if (details.results.length === 0) {
+    lines.push("");
+    lines.push(theme.fg("warning", "No results found."));
+  } else {
+    for (const [index, result] of details.results.entries()) {
+      lines.push("");
+      const title = trimText(result.title) || trimText(result.link) || "Untitled result";
+      lines.push(`${theme.fg("accent", `${index + 1}.`)} ${theme.fg("success", title)}`);
+      if (trimText(result.link)) {
+        lines.push(`${theme.fg("muted", "   URL: ")}${theme.fg("accent", result.link)}`);
+      }
+      if (trimText(result.published)) {
+        lines.push(`${theme.fg("muted", "   Published: ")}${theme.fg("dim", result.published)}`);
+      }
+      if (trimText(result.snippet)) {
+        lines.push(`${theme.fg("muted", "   Snippet: ")}${result.snippet}`);
+      }
+      if (trimText(result.content)) {
+        lines.push(theme.fg("muted", "   Content:"));
+        lines.push(...formatMultilineBlock(result.content, "     "));
+      } else if (trimText(result.content_error)) {
+        lines.push(
+          `${theme.fg("warning", "   Content error: ")}${theme.fg("warning", result.content_error)}`,
+        );
+      }
+    }
+  }
+
+  if ((details.related_searches?.length ?? 0) > 0) {
+    lines.push("");
+    lines.push(theme.fg("accent", "Related searches:"));
+    for (const term of details.related_searches ?? []) {
+      lines.push(`${theme.fg("muted", "- ")}${term}`);
     }
   }
 
@@ -559,6 +639,19 @@ function sendCommandMessage(pi: ExtensionAPI, content: string, details?: WebSear
 }
 
 export default function webSearchExtension(pi: ExtensionAPI): void {
+  pi.registerMessageRenderer(
+    "web-search-result",
+    (
+      message: ExtensionCustomMessage,
+      options: ExtensionMessageRenderOptions,
+      theme: ExtensionTheme,
+    ) => {
+      const content = typeof message.content === "string" ? message.content : "";
+      const details = message.details as WebSearchDetails | undefined;
+      return new Text(buildRenderedMessageText(content, details, options, theme), 0, 0);
+    },
+  );
+
   pi.registerCommand("web-search", {
     description: "Search the web and print results directly",
     handler: async (args, ctx) => {

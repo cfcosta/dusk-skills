@@ -5,6 +5,10 @@ export interface ExtensionTheme {
   strikethrough(text: string): string;
 }
 
+export interface ExtensionMessageRenderOptions {
+  expanded: boolean;
+}
+
 export interface ExtensionWidgetOptions {
   placement?: "above_editor" | "below_editor";
 }
@@ -185,6 +189,14 @@ export interface ExtensionAPI {
       description: string;
       handler: (args: unknown, ctx: ExtensionContext) => unknown;
     },
+  ): void;
+  registerMessageRenderer(
+    customType: string,
+    renderer: (
+      message: ExtensionCustomMessage,
+      options: ExtensionMessageRenderOptions,
+      theme: ExtensionTheme,
+    ) => unknown,
   ): void;
   registerTool<Params = unknown, Details = unknown>(
     definition: ExtensionToolDefinition<Params, Details>,
