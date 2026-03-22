@@ -422,6 +422,45 @@ test("real prompt bundle treats coverage gaps as execution work instead of a vet
   assert.match(loaded.prompts.executor, /test-backed workflow/i);
 });
 
+test("real mapper prompt includes the five LLM integration smell names", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(loaded.prompts.mapper, /Unbounded Max Metrics/i);
+  assert.match(loaded.prompts.mapper, /No Model Version Pinning/i);
+  assert.match(loaded.prompts.mapper, /No System Message/i);
+  assert.match(loaded.prompts.mapper, /No Structured Output/i);
+  assert.match(loaded.prompts.mapper, /LLM Temperature Not Explicitly Set/i);
+});
+
+test("real mapper prompt limits LLM smell reporting to explicit integration code", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(loaded.prompts.mapper, /explicit LLM inference or integration code/i);
+  assert.match(loaded.prompts.mapper, /concrete repository evidence in code/i);
+  assert.match(
+    loaded.prompts.mapper,
+    /provider SDK\/API usage, model identifiers, system\/user message arrays, temperature settings, max token \/ timeout \/ retry settings, or structured-output \/ schema configuration/i,
+  );
+  assert.match(
+    loaded.prompts.mapper,
+    /do not infer these smells from prompt templates, docs, comments, configuration names, or generic AI-adjacent language alone/i,
+  );
+  assert.match(loaded.prompts.mapper, /NOT APPLICABLE/i);
+  assert.match(loaded.prompts.mapper, /cite the exact integration code path/i);
+});
+
 test("workflow reports invalid assistant payload instead of retrying as empty output", async () => {
   const { workflow, ctx, sentMessages, notifications } = createHarness();
 

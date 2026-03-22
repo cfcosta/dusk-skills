@@ -38,6 +38,24 @@ Treat naming as a real refactor candidate when it reveals a boundary problem, hi
 
 Also flag existing names that have become inaccurate because the surrounding responsibility already changed. If the code is about to be refactored in that area anyway, treat stale rollout-era, migration-era, or implementation-era names as part of the structural problem rather than as cosmetic cleanup.
 
+## LLM integration smell appendix
+
+When the analyzed scope contains explicit LLM inference or integration code, also map the following LLM-specific smells as refactor candidates.
+
+Only report these smells when you have concrete repository evidence in code, such as provider SDK/API usage, model identifiers, system/user message arrays, temperature settings, max token / timeout / retry settings, or structured-output / schema configuration.
+
+Do not infer these smells from prompt templates, docs, comments, configuration names, or generic AI-adjacent language alone. If the repository does not contain explicit LLM integration code, mark this appendix as NOT APPLICABLE and move on.
+
+Use these exact smell names when the evidence matches:
+
+- **Unbounded Max Metrics** — token budgets, output caps, timeouts, retries, or concurrency-affecting request limits are left implicit or unbounded.
+- **No Model Version Pinning** — the code relies on a moving alias instead of an immutable model version or snapshot.
+- **No System Message** — role-based chat integrations omit a system message that sets stable behavior and constraints.
+- **No Structured Output** — downstream code expects typed or parseable output, but the integration does not enforce a response schema or equivalent structured-output contract.
+- **LLM Temperature Not Explicitly Set** — temperature is left implicit even though the integration depends on repeatability or controlled generation behavior.
+
+For each reported LLM smell, cite the exact integration code path and the specific setting, omission, or API usage that proves it.
+
 ## Catalog usage rules
 
 Use Fowler-style names as the canonical terms for refactoring actions. Older aliases are acceptable in parentheses, but the canonical action name should be the main label.
