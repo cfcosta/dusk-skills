@@ -1,3 +1,5 @@
+import type { Message } from "@mariozechner/pi-ai";
+
 export interface ToolObservation {
   toolName: string;
   summary: string;
@@ -12,14 +14,17 @@ export interface ConversationExcerptOptions {
   maxTotalChars?: number;
 }
 
-export interface BtwPromptContext {
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface BtwMessageContext {
   question: string;
-  cwd?: string;
-  modelLabel?: string;
-  mainAgentBusy?: boolean;
-  conversationExcerpt?: string;
+  conversationEntries: unknown[];
   liveAssistantText?: string;
   toolObservations?: ToolObservation[];
+  conversationOptions?: ConversationExcerptOptions;
 }
 
 const DEFAULT_MAX_MESSAGES = 6;
@@ -73,15 +78,15 @@ export function extractTextBlocks(content: unknown): string {
   return text;
 }
 
-export function buildConversationExcerpt(
+export function buildConversationMessages(
   entries: unknown[],
   options: ConversationExcerptOptions = {},
-): string {
+): ConversationMessage[] {
   const maxMessages = options.maxMessages ?? DEFAULT_MAX_MESSAGES;
   const maxMessageChars = options.maxMessageChars ?? DEFAULT_MAX_MESSAGE_CHARS;
   const maxTotalChars = options.maxTotalChars ?? DEFAULT_MAX_TOTAL_CHARS;
 
-  const collected: Array<{ role: "User" | "Assistant"; text: string }> = [];
+  const collected: ConversationMessage[] = [];
   let totalChars = 0;
 
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -116,7 +121,7 @@ export function buildConversationExcerpt(
     }
 
     collected.push({
-      role: role === "user" ? "User" : "Assistant",
+      role,
       text: normalizedText,
     });
     totalChars = nextTotal;
@@ -126,11 +131,65 @@ export function buildConversationExcerpt(
     }
   }
 
-  return collected
-    .reverse()
-    .map((item) => `${item.role}:\n${item.text}`)
+  return collected.reverse();
+}
+
+export function buildConversationExcerpt(
+  entries: unknown[],
+  options: ConversationExcerptOptions = {},
+): string {
+  return buildConversationMessages(entries, options)
+    .map((item) => `${item.role === "user" ? "User" : "Assistant"}:\n${item.text}`)
     .join("\n\n")
     .trim();
+}
+
+export function buildClaudeCodeSideQuestionPrompt(question: string): string {
+  const normalizedQuestion = normalizeWhitespace(question);
+  return `<system-reminder>This is a side question from the user. You must answer this question directly in a single response.\n${normalizedQuestion}`;
+}
+
+export function buildBtwMessages(context: BtwMessageContext): Message[] {
+  const conversationMessages = buildConversationMessages(
+    context.conversationEntries,
+    context.conversationOptions,
+  );
+
+  const messages: Message[] = conversationMessages.map((message, index) => ({
+    role: message.role,
+    content: [{ type: "text", text: message.text }],
+    timestamp: Date.now() + index,
+  }));
+
+  const liveAssistantText = normalizeWhitespace(context.liveAssistantText ?? "");
+  const lastAssistantText = [...conversationMessages]
+    .reverse()
+    .find((message) => message.role === "assistant")?.text;
+
+  if (liveAssistantText && liveAssistantText !== lastAssistantText) {
+    messages.push({
+      role: "assistant",
+      content: [{ type: "text", text: liveAssistantText }],
+      timestamp: Date.now() + messages.length,
+    });
+  }
+
+  const toolContext = formatToolContextReminder(context.toolObservations ?? []);
+  if (toolContext) {
+    messages.push({
+      role: "user",
+      content: [{ type: "text", text: toolContext }],
+      timestamp: Date.now() + messages.length,
+    });
+  }
+
+  messages.push({
+    role: "user",
+    content: [{ type: "text", text: buildClaudeCodeSideQuestionPrompt(context.question) }],
+    timestamp: Date.now() + messages.length,
+  });
+
+  return messages;
 }
 
 export function summarizeToolInput(toolName: string | undefined, input: unknown): string {
@@ -223,42 +282,17 @@ export function formatToolObservations(
     .join("\n");
 }
 
-export function buildBtwPrompt(context: BtwPromptContext): string {
-  const sections = ["Quick side question:", context.question.trim()];
-
-  const metadata: string[] = [];
-  if (context.cwd) {
-    metadata.push(`cwd: ${context.cwd}`);
-  }
-  if (context.modelLabel) {
-    metadata.push(`main model: ${context.modelLabel}`);
-  }
-  if (typeof context.mainAgentBusy === "boolean") {
-    metadata.push(`main agent: ${context.mainAgentBusy ? "busy" : "idle"}`);
-  }
-  if (metadata.length > 0) {
-    sections.push("Session metadata:", metadata.join("\n"));
+function formatToolContextReminder(observations: ToolObservation[]): string {
+  if (observations.length === 0) {
+    return "";
   }
 
-  if (context.liveAssistantText?.trim()) {
-    sections.push(
-      "Current partial assistant output from the main thread (may be unfinished):",
-      truncateText(context.liveAssistantText.trim(), 2400),
-    );
-  }
-
-  if (context.toolObservations && context.toolObservations.length > 0) {
-    sections.push(
-      "Recent tool observations from the main thread (already executed / already visible to Pi):",
-      formatToolObservations(context.toolObservations),
-    );
-  }
-
-  if (context.conversationExcerpt?.trim()) {
-    sections.push("Recent conversation excerpt:", context.conversationExcerpt.trim());
-  }
-
-  return sections.join("\n\n").trim();
+  return [
+    "<system-reminder>Additional already-observed tool context from the main thread. These tools have already run; treat this as existing session context, not a request to use tools.",
+    formatToolObservations(observations, DEFAULT_MAX_TOOL_ITEMS, DEFAULT_MAX_TOOL_SNIPPET_CHARS),
+  ]
+    .join("\n\n")
+    .trim();
 }
 
 function normalizeToolPath(value: unknown): string | undefined {

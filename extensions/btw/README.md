@@ -25,7 +25,7 @@ You can also run bare `/btw` and type the question into the editor prompt.
 
 ## Design notes
 
-This is an extension-only approximation of Claude Code's `/btw` behavior.
+This is still an extension-only approximation of Claude Code's `/btw` behavior, but it now uses the same observed side-question reminder prompt shape Claude Code sends for `/btw`.
 
 What it does well:
 

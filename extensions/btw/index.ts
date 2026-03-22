@@ -2,23 +2,14 @@ import { complete, type Message } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
 import {
-  buildBtwPrompt,
-  buildConversationExcerpt,
+  buildBtwMessages,
   extractTextBlocks,
   extractToolSnippet,
   summarizeToolInput,
   type ToolObservation,
 } from "./context-utils";
 
-const BTW_SYSTEM_PROMPT = `You answer quick, side questions about an in-progress coding session.
-
-Rules:
-- Use only the context provided in the prompt.
-- You do not have tool access.
-- Do not claim to have read files unless the provided context includes those contents or summaries.
-- If the context is insufficient, say what is missing.
-- Keep the answer compact and practical.
-- Prefer 3-6 bullets unless a short paragraph is clearer.`;
+const BTW_SYSTEM_PROMPT = "";
 
 const MAX_TOOL_OBSERVATIONS = 6;
 const MAX_LIVE_ASSISTANT_CHARS = 2400;
@@ -186,15 +177,16 @@ export default function btwExtension(pi: ExtensionAPI): void {
         return;
       }
 
-      const conversationExcerpt = buildConversationExcerpt(ctx.sessionManager.getBranch());
-      const prompt = buildBtwPrompt({
+      const messages = buildBtwMessages({
         question,
-        cwd: ctx.cwd,
-        modelLabel: `${ctx.model.provider}/${ctx.model.id}`,
-        mainAgentBusy: !ctx.isIdle(),
-        conversationExcerpt,
+        conversationEntries: ctx.sessionManager.getBranch(),
         liveAssistantText,
         toolObservations: recentToolObservations,
+        conversationOptions: {
+          maxMessages: 12,
+          maxMessageChars: 2400,
+          maxTotalChars: 14000,
+        },
       });
 
       const abortController = new AbortController();
@@ -211,7 +203,7 @@ export default function btwExtension(pi: ExtensionAPI): void {
               abort: () => abortController.abort(),
             });
 
-            runSideQuestion(ctx, apiKey, prompt, abortController.signal)
+            runSideQuestion(ctx, apiKey, messages, abortController.signal)
               .then((answer) => {
                 overlay.setAnswer(answer);
               })
@@ -261,20 +253,14 @@ async function resolveQuestion(
 async function runSideQuestion(
   ctx: ExtensionCommandContext,
   apiKey: string,
-  prompt: string,
+  messages: Message[],
   signal: AbortSignal,
 ): Promise<string> {
-  const userMessage: Message = {
-    role: "user",
-    content: [{ type: "text", text: prompt }],
-    timestamp: Date.now(),
-  };
-
   const response = await complete(
     ctx.model!,
     {
       systemPrompt: BTW_SYSTEM_PROMPT,
-      messages: [userMessage],
+      messages,
     },
     {
       apiKey,

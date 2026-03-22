@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildBtwPrompt,
+  buildBtwMessages,
+  buildClaudeCodeSideQuestionPrompt,
   buildConversationExcerpt,
   extractTextBlocks,
   extractToolSnippet,
@@ -74,6 +75,56 @@ test("buildConversationExcerpt enforces a last-message budget", () => {
   assert.equal(excerpt, "User:\nnew question\n\nAssistant:\nnew answer");
 });
 
+test("buildClaudeCodeSideQuestionPrompt matches Claude Code's side-question reminder", () => {
+  const prompt = buildClaudeCodeSideQuestionPrompt("Which method owns hidden follow-up dispatch?");
+
+  assert.equal(
+    prompt,
+    "<system-reminder>This is a side question from the user. You must answer this question directly in a single response.\nWhich method owns hidden follow-up dispatch?",
+  );
+});
+
+test("buildBtwMessages appends the side-question reminder after recent context", () => {
+  const messages = buildBtwMessages({
+    question: "Which method owns hidden follow-up dispatch?",
+    conversationEntries: [
+      {
+        type: "message",
+        message: { role: "user", content: [{ type: "text", text: "Explain /plan" }] },
+      },
+      {
+        type: "message",
+        message: { role: "assistant", content: [{ type: "text", text: "It stages approval." }] },
+      },
+    ],
+    liveAssistantText: "Still reviewing follow-up dispatch.",
+    toolObservations: [
+      {
+        toolName: "read",
+        summary: "read packages/workflow-core/src/guided-workflow.ts",
+        snippet: "private sendHiddenFollowUp(...)",
+        timestamp: Date.now(),
+      },
+    ],
+  });
+
+  assert.equal(messages.at(-1)?.role, "user");
+  assert.match(
+    (messages.at(-1)?.content?.[0] as { type: string; text: string }).text,
+    /^<system-reminder>This is a side question from the user\./,
+  );
+  assert.equal(messages.at(-2)?.role, "user");
+  assert.match(
+    (messages.at(-2)?.content?.[0] as { type: string; text: string }).text,
+    /Additional already-observed tool context/,
+  );
+  assert.equal(messages.at(-3)?.role, "assistant");
+  assert.equal(
+    (messages.at(-3)?.content?.[0] as { type: string; text: string }).text,
+    "Still reviewing follow-up dispatch.",
+  );
+});
+
 test("summarizeToolInput produces focused summaries for read and bash", () => {
   assert.equal(summarizeToolInput("read", { path: "@src/index.ts" }), "read src/index.ts");
   assert.match(summarizeToolInput("bash", { command: "git status --short" }), /^bash git status/);
@@ -104,31 +155,6 @@ test("formatToolObservations renders summaries and snippets", () => {
   const formatted = formatToolObservations(observations);
   assert.match(formatted, /read src\/index\.ts/);
   assert.match(formatted, /snippet: export default 42;/);
-});
-
-test("buildBtwPrompt includes the side question and context sections", () => {
-  const prompt = buildBtwPrompt({
-    question: "Which method owns hidden follow-up dispatch?",
-    cwd: "/repo",
-    modelLabel: "anthropic/claude-sonnet",
-    mainAgentBusy: true,
-    liveAssistantText: "Partial answer",
-    toolObservations: [
-      {
-        toolName: "read",
-        summary: "read packages/workflow-core/src/guided-workflow.ts",
-        snippet: "private sendHiddenFollowUp(...)",
-        timestamp: Date.now(),
-      },
-    ],
-    conversationExcerpt: "User:\nExplain /plan",
-  });
-
-  assert.match(prompt, /Quick side question:/);
-  assert.match(prompt, /Which method owns hidden follow-up dispatch\?/);
-  assert.match(prompt, /Current partial assistant output/);
-  assert.match(prompt, /Recent tool observations/);
-  assert.match(prompt, /Recent conversation excerpt/);
 });
 
 test("truncateText adds an ellipsis when over budget", () => {
