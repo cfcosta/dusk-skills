@@ -11,7 +11,7 @@ Autonomous experiment loop: try ideas, keep what works, discard what doesn't, ne
 
 - **`init_experiment`** — configure session (name, metric, unit, direction). Call again to re-initialize with a new baseline when the optimization target changes.
 - **`run_experiment`** — runs command, times it, captures output.
-- **`log_experiment`** — records result. `keep` auto-commits via `jj commit`. `discard`/`crash`/`checks_failed` auto-reverts code changes (autoresearch files preserved). Always include secondary `metrics` dict. Dashboard: ctrl+x.
+- **`log_experiment`** — records result. `keep` auto-commits via `jj commit` using a Conventional Commit title plus a detailed body. `discard`/`crash`/`checks_failed` auto-reverts code changes (autoresearch files preserved). Always include secondary `metrics` dict. Dashboard: ctrl+x.
 
 ## Setup
 
@@ -86,6 +86,8 @@ The script runs the same code every iteration — but you can **update it during
 
 Use `log_experiment`'s `asi` parameter to annotate each run with **whatever would help the next iteration make a better decision.** Free-form key/value pairs — you decide what's worth recording. Don't repeat the description or raw output; capture what you'd lose after a context reset.
 
+For kept runs, think of `asi` as the material for the auto-generated commit body. Include the reasoning you would want in a high-quality `jj commit`: experiment hypothesis, theory, validation notes, bottleneck explanation, trade-offs, and any metric interpretation that would help a reviewer understand why the change was kept.
+
 **Annotate failures and crashes heavily.** Discarded and crashed runs are reverted — the code changes are gone. The only record that survives is the description and ASI in `autoresearch.jsonl`. If you don't capture what you tried and why it failed, future iterations will waste time re-discovering the same dead ends.
 
 ### `autoresearch.config.json` (optional)
@@ -131,7 +133,8 @@ pnpm typecheck 2>&1 | grep -i error || true
 **LOOP FOREVER.** Never ask "should I continue?" — the user expects autonomous work.
 
 - **Primary metric is king.** Improved → `keep`. Worse/equal → `discard`. Secondary metrics rarely affect this.
-- **Annotate every run with `asi`.** Record what you learned — not what you did. What would help the next iteration or a fresh agent resuming this session?
+- **Use a Conventional Commit title in `description` for kept runs.** `log_experiment` uses it as the commit title and builds the detailed body from the run context, metrics, and ASI.
+- **Annotate every run with `asi`.** Record what you learned — not what you did. What would help the next iteration or a fresh agent resuming this session? For kept runs, this should be rich enough to support a detailed commit body.
 - **Watch the confidence score.** After 3+ runs, `log_experiment` reports a confidence score (best improvement as a multiple of the session noise floor). ≥2.0× means the improvement is likely real. <1.0× means it's within noise — consider re-running to confirm before keeping. The score is advisory — it never auto-discards.
 - **Simpler is better.** Removing code for equal perf = keep. Ugly complexity for tiny gain = probably discard.
 - **Don't thrash.** Repeatedly reverting the same idea? Try something structurally different.

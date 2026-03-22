@@ -178,7 +178,8 @@ const LogParams = Type.Object({
   }),
   status: StringEnum(["keep", "discard", "crash", "checks_failed"] as const),
   description: Type.String({
-    description: "Short description of what this experiment tried",
+    description:
+      "Conventional Commit title for the keep-commit, or a short experiment summary that can be promoted into one (e.g. 'perf: cache AST walk').",
   }),
   metrics: Type.Optional(
     Type.Record(Type.String(), Type.Number(), {
@@ -264,6 +265,148 @@ function formatNum(value: number | null, unit: string): string {
   if (value === Math.round(value)) return fmtNum(value) + u;
   // Fractional: 2 decimal places
   return fmtNum(value, 2) + u;
+}
+
+function formatPercentDelta(deltaPct: number): string {
+  const sign = deltaPct > 0 ? "+" : "";
+  return `${sign}${deltaPct.toFixed(1)}%`;
+}
+
+function isConventionalCommitTitle(value: string): boolean {
+  return /^(feat|fix|perf|refactor|docs|style|test|build|ci|chore|revert)(\([^)]+\))?!?:\s+.+/.test(
+    value.trim(),
+  );
+}
+
+function toSentence(value: string): string {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) return "";
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function makeAutoresearchCommitTitle(description: string): string {
+  const trimmed = description.trim();
+  if (!trimmed) return "perf: improve benchmark result";
+  if (isConventionalCommitTitle(trimmed)) return trimmed;
+  return `perf: ${trimmed}`;
+}
+
+function buildAutoresearchCommitMessage(
+  title: string,
+  experiment: ExperimentResult,
+  state: ExperimentState,
+  wallClockSeconds: number | null,
+  checks: { pass: boolean; output: string; duration: number } | null,
+): string {
+  const baseline = findBaselineMetric(state.results, state.currentSegment);
+  const baselineSecondary = findBaselineSecondary(
+    state.results,
+    state.currentSegment,
+    state.secondaryMetrics,
+  );
+
+  const body: string[] = [];
+
+  body.push("What changed");
+  body.push(toSentence(experiment.description));
+
+  body.push("");
+  body.push("Why");
+  body.push(
+    toSentence(
+      state.name
+        ? `Keep this experiment because it improved ${state.metricName} for ${state.name}`
+        : `Keep this experiment because it improved ${state.metricName}`,
+    ),
+  );
+
+  const hypothesis =
+    typeof experiment.asi?.hypothesis === "string" ? experiment.asi.hypothesis.trim() : "";
+  const theory =
+    typeof experiment.asi?.theory === "string"
+      ? experiment.asi.theory.trim()
+      : typeof experiment.asi?.rationale === "string"
+        ? experiment.asi.rationale.trim()
+        : typeof experiment.asi?.reasoning === "string"
+          ? experiment.asi.reasoning.trim()
+          : "";
+  const validation =
+    typeof experiment.asi?.validation === "string" ? experiment.asi.validation.trim() : "";
+
+  body.push("");
+  body.push("Experiment");
+  body.push(`- Workload: ${state.name || "(unnamed autoresearch session)"}`);
+  if (hypothesis) body.push(`- Hypothesis: ${toSentence(hypothesis)}`);
+  if (theory) body.push(`- Theory: ${toSentence(theory)}`);
+  if (validation) body.push(`- Validation intent: ${toSentence(validation)}`);
+
+  body.push("");
+  body.push("Validation");
+  if (baseline !== null && baseline !== 0) {
+    const deltaPct = ((experiment.metric - baseline) / baseline) * 100;
+    body.push(
+      `- Primary metric: ${state.metricName} ${formatNum(experiment.metric, state.metricUnit)} (baseline ${formatNum(baseline, state.metricUnit)}, ${formatPercentDelta(deltaPct)})`,
+    );
+  } else {
+    body.push(
+      `- Primary metric: ${state.metricName} ${formatNum(experiment.metric, state.metricUnit)}`,
+    );
+  }
+
+  if (Object.keys(experiment.metrics).length > 0) {
+    body.push("- Secondary metrics:");
+    for (const [name, value] of Object.entries(experiment.metrics)) {
+      const def = state.secondaryMetrics.find((m) => m.name === name);
+      const unit = def?.unit ?? "";
+      const baselineValue = baselineSecondary[name];
+      if (baselineValue !== undefined && baselineValue !== 0) {
+        const deltaPct = ((value - baselineValue) / baselineValue) * 100;
+        body.push(
+          `  - ${name}: ${formatNum(value, unit)} (baseline ${formatNum(baselineValue, unit)}, ${formatPercentDelta(deltaPct)})`,
+        );
+      } else {
+        body.push(`  - ${name}: ${formatNum(value, unit)}`);
+      }
+    }
+  }
+
+  if (state.confidence !== null) {
+    body.push(`- Confidence: ${state.confidence.toFixed(1)}× noise floor`);
+  }
+  if (wallClockSeconds !== null) {
+    body.push(`- Benchmark wall time: ${wallClockSeconds.toFixed(1)}s`);
+  }
+  if (checks) {
+    body.push(
+      checks.pass
+        ? `- Backpressure checks: passed in ${checks.duration.toFixed(1)}s`
+        : `- Backpressure checks: failed in ${checks.duration.toFixed(1)}s`,
+    );
+  } else {
+    body.push("- Backpressure checks: not run");
+  }
+
+  const asiEntries = Object.entries(experiment.asi ?? {}).filter(
+    ([key, value]) =>
+      value !== undefined &&
+      value !== null &&
+      String(value).trim() !== "" &&
+      key !== "hypothesis" &&
+      key !== "theory" &&
+      key !== "rationale" &&
+      key !== "reasoning" &&
+      key !== "validation",
+  );
+  if (asiEntries.length > 0) {
+    body.push("");
+    body.push("Experiment notes");
+    for (const [key, value] of asiEntries) {
+      const rendered = typeof value === "string" ? value : JSON.stringify(value);
+      body.push(`- ${key}: ${rendered}`);
+    }
+  }
+
+  return `${title}\n\n${body.join("\n")}`;
 }
 
 /** Lazy temp file allocator — returns the same path on subsequent calls */
@@ -1927,7 +2070,9 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
     promptSnippet: "Log experiment result (commit, metric, status, description)",
     promptGuidelines: [
       "Always call log_experiment after run_experiment to record the result.",
+      "For keep-candidates, make description a Conventional Commit title (for example 'perf: cache parser output'). log_experiment uses it as the jj commit title.",
       "log_experiment automatically runs jj commit on 'keep', and auto-reverts code changes on 'discard'/'crash'/'checks_failed' (autoresearch files are preserved). Do NOT commit or revert manually.",
+      "The auto-generated jj commit body should explain the experiment clearly: what changed, why, the theory or hypothesis, how it was validated, and the metric numbers/confidence/check results when available. Put the raw ingredients for that body into asi.",
       "Use status 'keep' if the PRIMARY metric improved. 'discard' if worse or unchanged. 'crash' if it failed. Secondary metrics are for monitoring — they almost never affect keep/discard. Only discard a primary improvement if a secondary metric degraded catastrophically, and explain why in the description.",
       "log_experiment reports a confidence score after 3+ runs (best improvement as a multiple of the noise floor). ≥2.0× = likely real, <1.0× = within noise. If confidence is below 1.0×, consider re-running the same experiment to confirm before keeping. The score is advisory — it never auto-discards.",
       "If you discover complex but promising optimizations you won't pursue immediately, append them as bullet points to autoresearch.ideas.md. Don't let good ideas get lost.",
@@ -2040,6 +2185,9 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       );
       experiment.confidence = state.confidence;
 
+      const wallClockSeconds = runtime.lastRunDuration;
+      const checksSummary = runtime.lastRunChecks;
+
       // Build response text
       const segmentCount = currentResults(state.results, state.currentSegment).length;
       let text = `Logged #${state.results.length}: ${experiment.status} — ${experiment.description}`;
@@ -2111,13 +2259,14 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       // Auto-commit only on keep — discards/crashes get reverted anyway
       if (params.status === "keep") {
         try {
-          const resultData: Record<string, unknown> = {
-            status: params.status,
-            [state.metricName || "metric"]: params.metric,
-            ...secondaryMetrics,
-          };
-          const trailerJson = JSON.stringify(resultData);
-          const commitMsg = `${params.description}\n\nResult: ${trailerJson}`;
+          const commitTitle = makeAutoresearchCommitTitle(params.description);
+          const commitMsg = buildAutoresearchCommitMessage(
+            commitTitle,
+            experiment,
+            state,
+            wallClockSeconds,
+            checksSummary,
+          );
 
           const execOpts = { cwd: workDir, timeout: 10000 };
           const diffResult = await pi.exec("jj", ["diff", "--summary"], execOpts);
@@ -2233,7 +2382,6 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       }
 
       // Clear running experiment and checks state (log_experiment consumes the run)
-      const wallClockSeconds = runtime.lastRunDuration;
       runtime.runningExperiment = null;
       runtime.lastRunChecks = null;
       runtime.lastRunDuration = null;
