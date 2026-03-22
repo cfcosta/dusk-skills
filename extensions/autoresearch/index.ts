@@ -172,7 +172,7 @@ const InitParams = Type.Object({
 });
 
 const LogParams = Type.Object({
-  commit: Type.String({ description: "Git commit hash (short, 7 chars)" }),
+  commit: Type.String({ description: "Commit identifier (short, 7 chars)" }),
   metric: Type.Number({
     description: "The primary optimization metric value (e.g. seconds, val_bpb). 0 for crashes.",
   }),
@@ -1198,7 +1198,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
     const hasIdeas = fs.existsSync(ideasPath);
 
     let resumeMsg =
-      "Autoresearch loop ended (likely context limit). Resume the experiment loop — read autoresearch.md and git log for context.";
+      "Autoresearch loop ended (likely context limit). Resume the experiment loop — read autoresearch.md and jj log for context.";
     if (hasIdeas) {
       resumeMsg +=
         " Check autoresearch.ideas.md for promising paths to explore. Prune stale/tried ideas.";
@@ -1927,7 +1927,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
     promptSnippet: "Log experiment result (commit, metric, status, description)",
     promptGuidelines: [
       "Always call log_experiment after run_experiment to record the result.",
-      "log_experiment automatically runs git add -A && git commit on 'keep', and auto-reverts code changes on 'discard'/'crash'/'checks_failed' (autoresearch files are preserved). Do NOT commit or revert manually.",
+      "log_experiment automatically runs jj commit on 'keep', and auto-reverts code changes on 'discard'/'crash'/'checks_failed' (autoresearch files are preserved). Do NOT commit or revert manually.",
       "Use status 'keep' if the PRIMARY metric improved. 'discard' if worse or unchanged. 'crash' if it failed. Secondary metrics are for monitoring — they almost never affect keep/discard. Only discard a primary improvement if a secondary metric degraded catastrophically, and explain why in the description.",
       "log_experiment reports a confidence score after 3+ runs (best improvement as a multiple of the noise floor). ≥2.0× = likely real, <1.0× = within noise. If confidence is below 1.0×, consider re-running the same experiment to confirm before keeping. The score is advisory — it never auto-discards.",
       "If you discover complex but promising optimizations you won't pursue immediately, append them as bullet points to autoresearch.ideas.md. Don't let good ideas get lost.",
@@ -2120,40 +2120,45 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
           const commitMsg = `${params.description}\n\nResult: ${trailerJson}`;
 
           const execOpts = { cwd: workDir, timeout: 10000 };
-          const addResult = await pi.exec("git", ["add", "-A"], execOpts);
-          if (addResult.code !== 0) {
-            const addErr = (addResult.stdout + addResult.stderr).trim();
-            throw new Error(`git add failed (exit ${addResult.code}): ${addErr.slice(0, 200)}`);
+          const diffResult = await pi.exec("jj", ["diff", "--summary"], execOpts);
+          const pendingSummary = (diffResult.stdout + diffResult.stderr).trim();
+          if (diffResult.code !== 0) {
+            throw new Error(
+              `jj diff failed (exit ${diffResult.code}): ${pendingSummary.slice(0, 200)}`,
+            );
           }
 
-          const diffResult = await pi.exec("git", ["diff", "--cached", "--quiet"], execOpts);
-          if (diffResult.code === 0) {
-            text += `\n📝 Git: nothing to commit (working tree clean)`;
+          if (!pendingSummary) {
+            text += `\n📝 jj: nothing to commit (working copy clean)`;
           } else {
-            const gitResult = await pi.exec("git", ["commit", "-m", commitMsg], execOpts);
-            const gitOutput = (gitResult.stdout + gitResult.stderr).trim();
-            if (gitResult.code === 0) {
-              const firstLine = gitOutput.split("\n")[0] || "";
-              text += `\n📝 Git: committed — ${firstLine}`;
+            const jjResult = await pi.exec("jj", ["commit", "-m", commitMsg], execOpts);
+            const jjOutput = (jjResult.stdout + jjResult.stderr).trim();
+            if (jjResult.code === 0) {
+              const firstLine = jjOutput.split("\n")[0] || "";
+              text += `\n📝 jj: committed — ${firstLine}`;
 
               try {
-                const shaResult = await pi.exec("git", ["rev-parse", "--short=7", "HEAD"], {
-                  cwd: workDir,
-                  timeout: 5000,
-                });
-                const newSha = (shaResult.stdout || "").trim();
-                if (newSha && newSha.length >= 7) {
-                  experiment.commit = newSha;
+                const revResult = await pi.exec(
+                  "jj",
+                  ["log", "-r", "@-", "--no-graph", "-T", 'commit_id.shortest(7) ++ "\\n"'],
+                  {
+                    cwd: workDir,
+                    timeout: 5000,
+                  },
+                );
+                const newRev = (revResult.stdout || "").trim();
+                if (newRev && newRev.length >= 7) {
+                  experiment.commit = newRev;
                 }
               } catch {
-                // Keep the original commit hash if rev-parse fails
+                // Keep the original commit identifier if lookup fails
               }
             } else {
-              text += `\n⚠️ Git commit failed (exit ${gitResult.code}): ${gitOutput.slice(0, 200)}`;
+              text += `\n⚠️ jj commit failed (exit ${jjResult.code}): ${jjOutput.slice(0, 200)}`;
             }
           }
         } catch (e) {
-          text += `\n⚠️ Git commit error: ${e instanceof Error ? e.message : String(e)}`;
+          text += `\n⚠️ jj commit error: ${e instanceof Error ? e.message : String(e)}`;
         }
       }
 
@@ -2171,7 +2176,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
         text += `\n⚠️ Failed to write autoresearch.jsonl: ${e instanceof Error ? e.message : String(e)}`;
       }
 
-      // Auto-revert on discard/crash/checks_failed — revert all files except autoresearch session files
+      // Auto-revert on discard/crash/checks_failed — restore working copy, then put autoresearch session files back
       if (params.status !== "keep") {
         try {
           const protectedFiles = [
@@ -2181,17 +2186,49 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
             "autoresearch.sh",
             "autoresearch.checks.sh",
           ];
-          const stageCmd = protectedFiles
-            .map((f) => `git add "${path.join(workDir, f)}" 2>/dev/null || true`)
-            .join("; ");
-          await pi.exec(
-            "bash",
-            ["-c", `${stageCmd}; git checkout -- .; git clean -fd 2>/dev/null`],
-            { cwd: workDir, timeout: 10000 },
-          );
-          text += `\n📝 Git: reverted changes (${params.status}) — autoresearch files preserved`;
+          const protectedSnapshots = protectedFiles.map((file) => {
+            const absPath = path.join(workDir, file);
+            try {
+              const stat = fs.statSync(absPath);
+              return {
+                absPath,
+                exists: true,
+                content: fs.readFileSync(absPath),
+                mode: stat.mode,
+              };
+            } catch {
+              return {
+                absPath,
+                exists: false,
+                content: null,
+                mode: null,
+              };
+            }
+          });
+
+          const restoreResult = await pi.exec("jj", ["restore"], { cwd: workDir, timeout: 10000 });
+          const restoreOutput = (restoreResult.stdout + restoreResult.stderr).trim();
+          if (restoreResult.code !== 0) {
+            throw new Error(
+              `jj restore failed (exit ${restoreResult.code}): ${restoreOutput.slice(0, 200)}`,
+            );
+          }
+
+          for (const snapshot of protectedSnapshots) {
+            if (snapshot.exists && snapshot.content) {
+              fs.mkdirSync(path.dirname(snapshot.absPath), { recursive: true });
+              fs.writeFileSync(snapshot.absPath, snapshot.content);
+              if (snapshot.mode !== null) {
+                fs.chmodSync(snapshot.absPath, snapshot.mode);
+              }
+            } else {
+              fs.rmSync(snapshot.absPath, { force: true, recursive: true });
+            }
+          }
+
+          text += `\n📝 jj: restored working copy (${params.status}) — autoresearch files preserved`;
         } catch (e) {
-          text += `\n⚠️ Git revert failed: ${e instanceof Error ? e.message : String(e)}`;
+          text += `\n⚠️ jj restore failed: ${e instanceof Error ? e.message : String(e)}`;
         }
       }
 
