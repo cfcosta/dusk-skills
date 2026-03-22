@@ -24,6 +24,8 @@ The default package bundles upstream Pi together with repo-owned resources:
   - `/fetch`
   - `/innovate`
   - `/jj-commit`
+- **Custom tools**
+  - `web_search`
 - **Skills**
   - `chrome-cdp`
   - `design-taste-frontend`
