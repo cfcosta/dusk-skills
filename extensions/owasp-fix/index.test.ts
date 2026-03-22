@@ -334,6 +334,39 @@ test("workflow reports invalid assistant payload instead of retrying as empty ou
   assert.match(notifications.at(-1)?.message ?? "", /invalid assistant payload/i);
 });
 
+test("real finder prompt requires repo triage and code-evidenced findings", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(loaded.prompts.finder, /classify the application or repository type/i);
+  assert.match(loaded.prompts.finder, /APPLICABLE or NOT APPLICABLE/i);
+  assert.match(loaded.prompts.finder, /No findings is acceptable/i);
+  assert.match(loaded.prompts.finder, /exact file, function, handler, route, query, or code path/i);
+  assert.match(
+    loaded.prompts.finder,
+    /attacker-controlled input across the relevant trust boundary to the security-sensitive sink or decision point/i,
+  );
+  assert.match(
+    loaded.prompts.finder,
+    /Do not report missing best practices, generic hardening advice, or theoretical weaknesses unless you can show a plausible exploit path in this codebase/i,
+  );
+  assert.match(loaded.prompts.finder, /Broken Access Control/i);
+  assert.match(loaded.prompts.finder, /Security Misconfiguration/i);
+  assert.match(loaded.prompts.finder, /Cryptographic Failures/i);
+  assert.match(loaded.prompts.finder, /Injection/i);
+  assert.match(loaded.prompts.finder, /Insecure Design/i);
+  assert.match(loaded.prompts.finder, /Authentication Failures/i);
+  assert.match(loaded.prompts.finder, /Software or Data Integrity Failures/i);
+  assert.match(loaded.prompts.finder, /Security Logging and Alerting Failures/i);
+  assert.match(loaded.prompts.finder, /Mishandling of exceptional conditions/i);
+  assert.match(loaded.prompts.finder, /Software Supply Chain Failures/i);
+});
+
 test("owaspFix command wiring uses real prompt files end-to-end", async () => {
   const commands: Record<string, { handler: (args: unknown, ctx: unknown) => Promise<unknown> }> =
     {};
@@ -374,7 +407,7 @@ test("owaspFix command wiring uses real prompt files end-to-end", async () => {
   await commands["owasp-fix"]?.handler("", ctx as never);
   assert.match(
     sentMessages[0] ?? "",
-    /You are a security-finding agent focused on OWASP Top 10 risks/,
+    /You are a security-finding agent focused on OWASP Top 10 2025 risks/,
   );
 
   await listeners.agent_end?.(
