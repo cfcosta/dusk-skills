@@ -79,6 +79,15 @@ Reject candidates where:
 - The plan introduces patch-specific, rollout-specific, or semantically weak names instead of stable domain names
 - The proposal hides materially different work behind umbrella labels such as **Rename**, **Move**, or **Simplify Conditional** instead of identifying the specific action that must happen
 
+## LLM smell approval calibration
+
+When judging LLM-specific smell candidates, require explicit applicability evidence before approving any work.
+
+- Approve an LLM smell only when the repository contains a concrete LLM integration path in code and the candidate ties the smell to that exact path.
+- Reject or defer claims that rely only on prompt templates, docs, comments, README examples, naming, or generic AI-adjacent context.
+- Require repo-specific approval or rejection criteria: identify the exact call site, message construction path, schema expectation, model identifier, or request-setting omission that makes the smell real here.
+- Keep remediation concrete and local to the evidenced integration path. Do not widen an LLM smell approval into runtime/framework redesign unless the mapper proved that broader scope is necessary.
+
 ## Catalog judgment rules
 
 Use Fowler-style names as the canonical labels for approved refactor steps.

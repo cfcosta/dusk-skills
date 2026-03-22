@@ -490,6 +490,35 @@ test("real skeptic prompt rejects LLM smell claims without direct integration ev
   );
 });
 
+test("real arbiter prompt requires evidence-backed approval for LLM smell candidates", () => {
+  const promptDirectory = path.join(path.dirname(new URL(import.meta.url).pathname), "prompts");
+  const loaded = loadPrompts(promptDirectory);
+
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) {
+    return;
+  }
+
+  assert.match(loaded.prompts.arbiter, /explicit applicability evidence/i);
+  assert.match(
+    loaded.prompts.arbiter,
+    /concrete LLM integration path in code and the candidate ties the smell to that exact path/i,
+  );
+  assert.match(
+    loaded.prompts.arbiter,
+    /prompt templates, docs, comments, README examples, naming, or generic AI-adjacent context/i,
+  );
+  assert.match(loaded.prompts.arbiter, /repo-specific approval or rejection criteria/i);
+  assert.match(
+    loaded.prompts.arbiter,
+    /exact call site, message construction path, schema expectation, model identifier, or request-setting omission/i,
+  );
+  assert.match(
+    loaded.prompts.arbiter,
+    /Do not widen an LLM smell approval into runtime\/framework redesign/i,
+  );
+});
+
 test("workflow reports invalid assistant payload instead of retrying as empty output", async () => {
   const { workflow, ctx, sentMessages, notifications } = createHarness();
 
